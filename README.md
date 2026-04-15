@@ -10,12 +10,23 @@
 - 展示官方估算值、官方估算涨跌、昨日增长、近一月增长
 - 默认按官方估算涨跌从大到小排序
 - 缓存最近一次刷新结果
+- 个人页面支持复制公共页面或其他个人页面的跟踪列表
+- 个人页面支持按基金设置涨跌提醒，并在“重要提醒”中查看触发状态
+
+当前版本：`0.3.0`
+
+版本记录：
+
+- `0.3.0`: 首页增加“关于”，个人页增加复制跟踪列表、长按基金操作、涨跌提醒和重要提醒记录。
+- `0.2.0`: 优化移动端列表，固定基金名称列，加入紧凑顶部工具栏。
+- `0.1.0`: 创建 Android 原生项目，支持基金跟踪、刷新和缓存。
 
 ## 项目结构
 
 - `app/src/main/java/com/hxpig/fundvaluation/MainActivity.java`: 原生页面和交互
+- `app/src/main/java/com/hxpig/fundvaluation/FundAlert.java`: 个人页涨跌提醒规则
 - `app/src/main/java/com/hxpig/fundvaluation/FundService.java`: 天天基金、东方财富接口请求
-- `app/src/main/java/com/hxpig/fundvaluation/FundStorage.java`: 本地基金列表、缓存、个人页隔离
+- `app/src/main/java/com/hxpig/fundvaluation/FundStorage.java`: 本地基金列表、缓存、个人页隔离和提醒状态
 - `app/src/main/res/raw/default_tracked_funds.txt`: 从原站点带过来的默认公共跟踪列表
 
 ## 数据源

@@ -58,6 +58,8 @@ public final class MainActivity extends Activity {
     private TextView statusText;
     private Button refreshButton;
     private Button toggleExtraButton;
+    private Button importantButton;
+    private TextView importantBadge;
     private TableLayout fixedTable;
     private TableLayout scrollTable;
     private boolean refreshing;
@@ -97,11 +99,11 @@ public final class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setGravity(Gravity.CENTER);
         root.setPadding(dp(18), dp(36), dp(18), dp(36));
         scrollView.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         TextView title = text("基金估值跟踪", 28, COLOR_INK, Typeface.BOLD);
         root.addView(title, blockParams(0, 0, 0, 10));
@@ -135,7 +137,16 @@ public final class MainActivity extends Activity {
                 enterPersonalProfile();
             }
         });
-        card.addView(personalButton);
+        card.addView(personalButton, blockParams(0, 0, 0, 12));
+
+        Button aboutButton = button("关于", Color.WHITE, COLOR_INK);
+        aboutButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                showAboutDialog();
+            }
+        });
+        card.addView(aboutButton);
 
         setContentView(scrollView);
     }
@@ -174,6 +185,41 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 1.0f);
         toolbar.addView(pageText, titleParams);
+
+        String profile = storage.getCurrentProfile();
+        if (profile.length() > 0) {
+            Button copyButton = iconButton("复制", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+            copyButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showCopyDialog();
+                }
+            });
+            toolbar.addView(copyButton, compactParams(8, 0, 6, 0));
+
+            LinearLayout importantWrap = row();
+            importantWrap.setGravity(Gravity.CENTER_VERTICAL);
+            importantButton = iconButton("重要", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+            importantButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showImportantAlertsDialog();
+                }
+            });
+            importantWrap.addView(importantButton);
+            importantBadge = text("", 11, Color.WHITE, Typeface.BOLD);
+            importantBadge.setGravity(Gravity.CENTER);
+            importantBadge.setMinWidth(dp(20));
+            importantBadge.setMinHeight(dp(20));
+            importantBadge.setPadding(dp(5), 0, dp(5), 0);
+            importantBadge.setBackground(rounded(COLOR_DANGER, COLOR_DANGER));
+            importantBadge.setVisibility(View.GONE);
+            importantWrap.addView(importantBadge, compactParams(3, 0, 0, 0));
+            toolbar.addView(importantWrap, compactParams(0, 0, 6, 0));
+        } else {
+            importantButton = null;
+            importantBadge = null;
+        }
 
         Button addButton = iconButton("⊕", COLOR_BRAND, Color.WHITE);
         addButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
@@ -243,6 +289,105 @@ public final class MainActivity extends Activity {
         setDefaultStatus();
     }
 
+    private void showAboutDialog() {
+        String message = "作者：Facico\n"
+                + "仓库：https://github.com/HxPigGroup/fund_valuation_android\n\n"
+                + "版本更新：\n"
+                + "0.3.0：新增首页关于、个人页复制跟踪列表、长按基金操作、个人提醒规则和重要提醒记录。\n"
+                + "0.2.0：优化移动端列表，固定基金名称列，加入紧凑顶部工具栏。\n"
+                + "0.1.0：创建 Android 原生项目，支持基金跟踪、刷新和缓存。\n\n"
+                + "主要功能：\n"
+                + "公共页面和个人页面分开管理；本地保存基金跟踪列表；刷新官方估算值、今日估值涨跌、昨日增长和近一月增长；个人页面可设置涨跌提醒，并在重要提醒中查看触发情况。";
+        new AlertDialog.Builder(this)
+                .setTitle("关于")
+                .setMessage(message)
+                .setPositiveButton("知道了", null)
+                .show();
+    }
+
+    private void showCopyDialog() {
+        final String currentProfile = storage.getCurrentProfile();
+        if (currentProfile.length() == 0) {
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("复制跟踪列表")
+                .setItems(new CharSequence[]{"从公共页面复制", "从其他个人页面复制"}, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        if (which == 0) {
+                            confirmCopyFrom("");
+                        } else {
+                            showCopyPhoneDialog();
+                        }
+                    }
+                })
+                .show();
+    }
+
+    private void showCopyPhoneDialog() {
+        final EditText input = input("输入要复制的 11 位手机号", InputType.TYPE_CLASS_NUMBER);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(dp(18), dp(10), dp(18), 0);
+        box.addView(input, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(this)
+                .setTitle("从个人页面复制")
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("下一步", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        String sourceProfile = normalizePhone(input.getText().toString());
+                        if (!FundFormat.hasValue(sourceProfile)) {
+                            setStatus("请输入 11 位手机号。", true);
+                            return;
+                        }
+                        if (sourceProfile.equals(storage.getCurrentProfile())) {
+                            setStatus("不能复制当前个人页面。", true);
+                            return;
+                        }
+                        confirmCopyFrom(sourceProfile);
+                    }
+                })
+                .show();
+    }
+
+    private void confirmCopyFrom(final String sourceProfile) {
+        List<String> sourceCodes = storage.getCodes(sourceProfile);
+        if (sourceCodes.isEmpty()) {
+            setStatus(sourceProfile.length() == 0 ? "公共页面没有可复制的基金。" : "目标个人页面没有可复制的基金。", true);
+            return;
+        }
+        String sourceName = sourceProfile.length() == 0 ? "公共页面" : "个人页面 " + maskPhone(sourceProfile);
+        new AlertDialog.Builder(this)
+                .setTitle("确认复制")
+                .setMessage("将用“" + sourceName + "”的 " + sourceCodes.size() + " 只基金覆盖当前个人页面。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("复制", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        copyTrackingList(sourceProfile);
+                    }
+                })
+                .show();
+    }
+
+    private void copyTrackingList(String sourceProfile) {
+        String currentProfile = storage.getCurrentProfile();
+        if (currentProfile.length() == 0) {
+            return;
+        }
+        List<String> sourceCodes = storage.getCodes(sourceProfile);
+        storage.saveCodes(currentProfile, sourceCodes);
+        storage.saveRows(currentProfile, new ArrayList<FundRow>());
+        storage.saveAlerts(currentProfile, new ArrayList<FundAlert>());
+        storage.saveUpdatedAt(currentProfile, "");
+        render();
+        setStatus("已复制 " + sourceCodes.size() + " 只基金，点 ↻ 刷新估值。", false);
+    }
+
     private void render() {
         if (onEntryScreen || fixedTable == null || scrollTable == null) {
             return;
@@ -251,6 +396,9 @@ public final class MainActivity extends Activity {
         String profile = storage.getCurrentProfile();
         List<String> codes = storage.getCodes(profile);
         Map<String, FundRow> cachedRows = storage.getCachedRows(profile);
+        if (profile.length() > 0) {
+            storage.evaluateAlerts(profile, cachedRows);
+        }
         List<FundRow> rows = new ArrayList<>();
         for (String code : codes) {
             FundRow row = cachedRows.get(code);
@@ -263,7 +411,31 @@ public final class MainActivity extends Activity {
         refreshButton.setEnabled(!refreshing);
         refreshButton.setBackground(rounded(refreshing ? COLOR_MUTED : COLOR_BRAND, refreshing ? COLOR_MUTED : COLOR_BRAND));
         toggleExtraButton.setText(showExtraColumns ? "简" : "列");
+        updateImportantButton(profile);
         renderTable(rows);
+    }
+
+    private void updateImportantButton(String profile) {
+        if (importantButton == null) {
+            return;
+        }
+        int count = storage.getTriggeredAlertCount(profile);
+        if (count > 0) {
+            importantButton.setText("重要");
+            importantButton.setTextColor(Color.rgb(23, 92, 211));
+            importantButton.setBackground(rounded(Color.rgb(234, 242, 255), Color.rgb(234, 242, 255)));
+            if (importantBadge != null) {
+                importantBadge.setText(String.valueOf(count));
+                importantBadge.setVisibility(View.VISIBLE);
+            }
+        } else {
+            importantButton.setText("重要");
+            importantButton.setTextColor(Color.rgb(23, 92, 211));
+            importantButton.setBackground(rounded(Color.rgb(234, 242, 255), Color.rgb(234, 242, 255)));
+            if (importantBadge != null) {
+                importantBadge.setVisibility(View.GONE);
+            }
+        }
     }
 
     private void renderTable(List<FundRow> rows) {
@@ -283,7 +455,6 @@ public final class MainActivity extends Activity {
         }
         addHeader(scrollHeader, "昨日增长", 96);
         addHeader(scrollHeader, "近一月增长", 106);
-        addHeader(scrollHeader, "操作", 76);
         scrollTable.addView(scrollHeader);
 
         if (rows.isEmpty()) {
@@ -302,32 +473,22 @@ public final class MainActivity extends Activity {
         for (final FundRow row : rows) {
             TableRow fixedRow = new TableRow(this);
             String name = FundFormat.hasValue(row.name) ? row.name : row.code;
-            fixedRow.addView(nameCell(name, row.code));
+            TextView fixedNameCell = nameCell(name, row.code);
+            attachFundLongPress(fixedNameCell, row);
+            fixedRow.setOnLongClickListener(fundLongClickListener(row));
+            fixedRow.addView(fixedNameCell);
             fixedTable.addView(fixedRow);
 
             TableRow scrollRow = new TableRow(this);
-            addCell(scrollRow, row.estimateGrowth, 104, toneColor(row.estimateGrowth), Typeface.BOLD);
-            addCell(scrollRow, row.estimateValue, 104, COLOR_INK, Typeface.NORMAL);
+            scrollRow.setOnLongClickListener(fundLongClickListener(row));
+            attachFundLongPress(addCell(scrollRow, row.estimateGrowth, 104, toneColor(row.estimateGrowth), Typeface.BOLD), row);
+            attachFundLongPress(addCell(scrollRow, row.estimateValue, 104, COLOR_INK, Typeface.NORMAL), row);
             if (showExtraColumns) {
-                addCell(scrollRow, row.selfEstimateValue, 96, COLOR_MUTED, Typeface.NORMAL);
-                addCell(scrollRow, row.selfEstimateGrowth, 96, toneColor(row.selfEstimateGrowth), Typeface.NORMAL);
+                attachFundLongPress(addCell(scrollRow, row.selfEstimateValue, 96, COLOR_MUTED, Typeface.NORMAL), row);
+                attachFundLongPress(addCell(scrollRow, row.selfEstimateGrowth, 96, toneColor(row.selfEstimateGrowth), Typeface.NORMAL), row);
             }
-            addCell(scrollRow, row.publishedGrowth, 96, toneColor(row.publishedGrowth), Typeface.NORMAL);
-            addCell(scrollRow, row.monthGrowth, 106, toneColor(row.monthGrowth), Typeface.NORMAL);
-
-            Button deleteButton = iconButton("删", COLOR_DANGER, Color.WHITE);
-            deleteButton.setMinWidth(dp(54));
-            deleteButton.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    deleteCode(row.code);
-                }
-            });
-            TableRow.LayoutParams params = new TableRow.LayoutParams(
-                    dp(76),
-                    dp(ROW_MIN_HEIGHT_DP));
-            params.setMargins(0, 0, 0, 0);
-            scrollRow.addView(deleteButton, params);
+            attachFundLongPress(addCell(scrollRow, row.publishedGrowth, 96, toneColor(row.publishedGrowth), Typeface.NORMAL), row);
+            attachFundLongPress(addCell(scrollRow, row.monthGrowth, 106, toneColor(row.monthGrowth), Typeface.NORMAL), row);
             scrollTable.addView(scrollRow);
         }
     }
@@ -364,8 +525,10 @@ public final class MainActivity extends Activity {
         row.addView(headerCell(text, widthDp, Gravity.CENTER));
     }
 
-    private void addCell(TableRow row, String text, int widthDp, int color, int style) {
-        row.addView(cell(text, widthDp, color, style, Gravity.CENTER));
+    private TextView addCell(TableRow row, String text, int widthDp, int color, int style) {
+        TextView view = cell(text, widthDp, color, style, Gravity.CENTER);
+        row.addView(view);
+        return view;
     }
 
     private TextView cell(String text, int widthDp, int color, int style, int gravity) {
@@ -376,6 +539,160 @@ public final class MainActivity extends Activity {
         view.setPadding(dp(8), dp(8), dp(8), dp(8));
         view.setSingleLine(false);
         view.setBackground(rounded(Color.WHITE, Color.rgb(234, 236, 240)));
+        return view;
+    }
+
+    private void attachFundLongPress(View view, final FundRow row) {
+        view.setOnLongClickListener(fundLongClickListener(row));
+    }
+
+    private View.OnLongClickListener fundLongClickListener(final FundRow row) {
+        return new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View view) {
+                showFundActionDialog(row);
+                return true;
+            }
+        };
+    }
+
+    private void showFundActionDialog(final FundRow row) {
+        final String profile = storage.getCurrentProfile();
+        CharSequence[] items = profile.length() == 0
+                ? new CharSequence[]{"删除"}
+                : new CharSequence[]{"删除", "提醒"};
+        new AlertDialog.Builder(this)
+                .setTitle((FundFormat.hasValue(row.name) ? row.name : row.code) + "\n" + row.code)
+                .setItems(items, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        if (which == 0) {
+                            deleteCode(row.code);
+                        } else {
+                            showAlertRuleDialog(row);
+                        }
+                    }
+                })
+                .show();
+    }
+
+    private void showAlertRuleDialog(final FundRow row) {
+        final String profile = storage.getCurrentProfile();
+        if (profile.length() == 0) {
+            return;
+        }
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+
+        TextView current = text("当前今日估值涨跌：" + FundFormat.orBlank(row.estimateGrowth), 14, COLOR_MUTED, Typeface.NORMAL);
+        box.addView(current, blockParams(0, 0, 0, 10));
+
+        final EditText upInput = input("收益率涨百分之多少，例如 2.5", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        box.addView(upInput, blockParams(0, 0, 0, 8));
+
+        final EditText downInput = input("收益率跌百分之多少，例如 2.5", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        box.addView(downInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle("设置提醒")
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        saveAlertRules(profile, row, upInput.getText().toString(), downInput.getText().toString());
+                    }
+                })
+                .show();
+    }
+
+    private void saveAlertRules(String profile, FundRow row, String upText, String downText) {
+        Double upThreshold = parseThreshold(upText);
+        Double downThreshold = parseThreshold(downText);
+        if (upThreshold == null && downThreshold == null) {
+            setStatus("请输入上涨或下跌提醒线。", true);
+            return;
+        }
+        if (upThreshold != null) {
+            FundAlert alert = new FundAlert(row.code, FundAlert.DIRECTION_UP, upThreshold);
+            alert.fundName = FundFormat.hasValue(row.name) ? row.name : row.code;
+            storage.upsertAlert(profile, alert);
+        }
+        if (downThreshold != null) {
+            FundAlert alert = new FundAlert(row.code, FundAlert.DIRECTION_DOWN, downThreshold);
+            alert.fundName = FundFormat.hasValue(row.name) ? row.name : row.code;
+            storage.upsertAlert(profile, alert);
+        }
+        storage.evaluateAlerts(profile, storage.getCachedRows(profile));
+        render();
+        setStatus("已保存提醒，点“重要”查看触发情况。", false);
+    }
+
+    private Double parseThreshold(String value) {
+        Double number = FundFormat.parseNumber(value);
+        if (number == null) {
+            return null;
+        }
+        number = Math.abs(number);
+        return number > 0 ? number : null;
+    }
+
+    private void showImportantAlertsDialog() {
+        String profile = storage.getCurrentProfile();
+        if (profile.length() == 0) {
+            return;
+        }
+        storage.evaluateAlerts(profile, storage.getCachedRows(profile));
+        List<FundAlert> alerts = storage.getAlerts(profile);
+        if (alerts.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("重要提醒")
+                    .setMessage("还没有设置提醒。长按基金后点“提醒”即可添加。")
+                    .setPositiveButton("知道了", null)
+                    .show();
+            return;
+        }
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(dp(14), dp(8), dp(14), dp(8));
+        Collections.sort(alerts, new Comparator<FundAlert>() {
+            @Override
+            public int compare(FundAlert left, FundAlert right) {
+                if (left.triggered != right.triggered) {
+                    return left.triggered ? -1 : 1;
+                }
+                return left.code.compareTo(right.code);
+            }
+        });
+        for (FundAlert alert : alerts) {
+            list.addView(alertView(alert), blockParams(0, 0, 0, 8));
+        }
+
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.addView(list, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(this)
+                .setTitle("重要提醒")
+                .setView(scrollView)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    private TextView alertView(FundAlert alert) {
+        String latest = Double.isNaN(alert.latestGrowth) ? "---" : FundFormat.percentFromNumber(alert.latestGrowth);
+        String status = alert.triggered ? "已触发" : "未触发";
+        String time = alert.triggered ? alert.triggeredAt : alert.evaluatedAt;
+        String text = status + " | " + FundFormat.orBlank(alert.fundName) + "\n"
+                + alert.code + " | 目标：" + alert.targetText() + " | 当前：" + latest
+                + (FundFormat.hasValue(time) ? "\n" + time : "");
+        TextView view = text(text, 14, alert.triggered ? COLOR_DANGER : COLOR_INK, alert.triggered ? Typeface.BOLD : Typeface.NORMAL);
+        view.setPadding(dp(10), dp(10), dp(10), dp(10));
+        view.setSingleLine(false);
+        view.setBackground(rounded(alert.triggered ? Color.rgb(255, 241, 243) : Color.WHITE, alert.triggered ? COLOR_DANGER : COLOR_LINE));
         return view;
     }
 
@@ -423,6 +740,7 @@ public final class MainActivity extends Activity {
         List<String> codes = storage.getCodes(profile);
         codes.remove(code);
         storage.saveCodes(profile, codes);
+        storage.deleteAlertsForCode(profile, code);
         render();
         setStatus("已删除 " + code + "。", false);
     }

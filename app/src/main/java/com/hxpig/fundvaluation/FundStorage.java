@@ -91,6 +91,103 @@ final class FundStorage {
         prefs.edit().putString(updatedKey(profile), value).apply();
     }
 
+    List<FundAlert> getAlerts(String profile) {
+        List<FundAlert> alerts = new ArrayList<>();
+        String raw = prefs.getString(alertsKey(profile), "[]");
+        try {
+            JSONArray array = new JSONArray(raw);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject object = array.optJSONObject(i);
+                if (object == null) {
+                    continue;
+                }
+                FundAlert alert = FundAlert.fromJson(object);
+                if (FundFormat.hasValue(alert.code) && alert.threshold > 0) {
+                    alerts.add(alert);
+                }
+            }
+        } catch (JSONException ignored) {
+        }
+        return alerts;
+    }
+
+    void saveAlerts(String profile, List<FundAlert> alerts) {
+        JSONArray array = new JSONArray();
+        for (FundAlert alert : alerts) {
+            try {
+                array.put(alert.toJson());
+            } catch (JSONException ignored) {
+            }
+        }
+        prefs.edit().putString(alertsKey(profile), array.toString()).apply();
+    }
+
+    void upsertAlert(String profile, FundAlert nextAlert) {
+        List<FundAlert> alerts = getAlerts(profile);
+        boolean updated = false;
+        for (int i = 0; i < alerts.size(); i++) {
+            FundAlert item = alerts.get(i);
+            if (item.key().equals(nextAlert.key())) {
+                alerts.set(i, nextAlert);
+                updated = true;
+                break;
+            }
+        }
+        if (!updated) {
+            alerts.add(nextAlert);
+        }
+        saveAlerts(profile, alerts);
+    }
+
+    void deleteAlertsForCode(String profile, String code) {
+        List<FundAlert> alerts = getAlerts(profile);
+        List<FundAlert> kept = new ArrayList<>();
+        for (FundAlert alert : alerts) {
+            if (!code.equals(alert.code)) {
+                kept.add(alert);
+            }
+        }
+        saveAlerts(profile, kept);
+    }
+
+    int getTriggeredAlertCount(String profile) {
+        int count = 0;
+        for (FundAlert alert : getAlerts(profile)) {
+            if (alert.triggered) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    void evaluateAlerts(String profile, Map<String, FundRow> rows) {
+        List<FundAlert> alerts = getAlerts(profile);
+        if (alerts.isEmpty()) {
+            return;
+        }
+        String now = FundFormat.nowText();
+        for (FundAlert alert : alerts) {
+            FundRow row = rows.get(alert.code);
+            Double growth = row == null ? null : FundFormat.parseNumber(row.estimateGrowth);
+            if (row != null && FundFormat.hasValue(row.name)) {
+                alert.fundName = row.name;
+            }
+            alert.evaluatedAt = now;
+            if (growth == null) {
+                alert.latestGrowth = Double.NaN;
+                alert.triggered = false;
+                continue;
+            }
+            alert.latestGrowth = growth;
+            boolean triggered = FundAlert.DIRECTION_UP.equals(alert.direction)
+                    ? growth >= alert.threshold
+                    : growth <= -alert.threshold;
+            alert.triggered = triggered;
+            alert.triggeredAt = triggered ? now : "";
+        }
+        saveAlerts(profile, alerts);
+    }
+
     private void seedPublicProfileIfNeeded() {
         String key = codesKey(PUBLIC_PROFILE);
         if (prefs.contains(key)) {
@@ -172,5 +269,9 @@ final class FundStorage {
 
     private static String updatedKey(String profile) {
         return "updated_" + profileKey(profile);
+    }
+
+    private static String alertsKey(String profile) {
+        return "alerts_" + profileKey(profile);
     }
 }
