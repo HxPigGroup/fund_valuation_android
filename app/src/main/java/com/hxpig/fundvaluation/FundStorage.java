@@ -20,6 +20,7 @@ import java.util.Map;
 final class FundStorage {
     private static final String PREFS_NAME = "fund_valuation";
     private static final String KEY_PROFILE = "active_profile";
+    private static final String KEY_RECENT_PROFILES = "recent_profiles";
     private static final String PUBLIC_PROFILE = "";
 
     private final Context context;
@@ -37,6 +38,30 @@ final class FundStorage {
 
     void setCurrentProfile(String profile) {
         prefs.edit().putString(KEY_PROFILE, profile == null ? PUBLIC_PROFILE : profile).apply();
+    }
+
+    void rememberProfile(String profile) {
+        if (!FundFormat.hasValue(profile)) {
+            return;
+        }
+        List<String> recent = getRecentProfiles();
+        recent.remove(profile);
+        recent.add(0, profile);
+        while (recent.size() > 5) {
+            recent.remove(recent.size() - 1);
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String item : recent) {
+            builder.append(item).append('\n');
+        }
+        prefs.edit()
+                .putString(KEY_RECENT_PROFILES, builder.toString())
+                .putString(KEY_PROFILE, profile)
+                .apply();
+    }
+
+    List<String> getRecentProfiles() {
+        return parsePhones(prefs.getString(KEY_RECENT_PROFILES, ""));
     }
 
     List<String> getCodes(String profile) {
@@ -250,6 +275,29 @@ final class FundStorage {
             digits = "0" + digits;
         }
         return digits;
+    }
+
+    static String normalizePhone(String value) {
+        if (value == null) {
+            return "";
+        }
+        String digits = value.replaceAll("\\D", "");
+        return digits.length() == 11 ? digits : "";
+    }
+
+    private static List<String> parsePhones(String raw) {
+        List<String> phones = new ArrayList<>();
+        if (raw == null) {
+            return phones;
+        }
+        String[] lines = raw.split("[\\r\\n]+");
+        for (String line : lines) {
+            String phone = normalizePhone(line);
+            if (FundFormat.hasValue(phone) && !phones.contains(phone)) {
+                phones.add(phone);
+            }
+        }
+        return phones;
     }
 
     private static String profileKey(String profile) {

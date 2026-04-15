@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.text.InputType;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -139,6 +140,34 @@ public final class MainActivity extends Activity {
         });
         card.addView(personalButton, blockParams(0, 0, 0, 12));
 
+        List<String> recentProfiles = storage.getRecentProfiles();
+        if (!recentProfiles.isEmpty()) {
+            final String lastProfile = recentProfiles.get(0);
+            Button lastButton = button("进入上次个人界面 " + maskPhone(lastProfile), Color.rgb(255, 241, 243), COLOR_DANGER);
+            lastButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    enterStoredProfile(lastProfile);
+                }
+            });
+            card.addView(lastButton, blockParams(0, 0, 0, 8));
+
+            TextView recentTitle = text("本机最近使用", 13, COLOR_MUTED, Typeface.NORMAL);
+            card.addView(recentTitle, blockParams(0, 0, 0, 6));
+            int count = Math.min(3, recentProfiles.size());
+            for (int i = 0; i < count; i++) {
+                final String phone = recentProfiles.get(i);
+                Button recentButton = button(maskPhone(phone), Color.WHITE, COLOR_INK);
+                recentButton.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        enterStoredProfile(phone);
+                    }
+                });
+                card.addView(recentButton, blockParams(0, 0, 0, 6));
+            }
+        }
+
         Button aboutButton = button("关于", Color.WHITE, COLOR_INK);
         aboutButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -169,17 +198,21 @@ public final class MainActivity extends Activity {
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
         root.addView(toolbar, blockParams(0, 0, 0, 8));
 
-        Button backButton = iconButton("返回", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+        Button backButton = iconButton("‹", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+        backButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
         backButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 showEntryScreen();
             }
         });
-        toolbar.addView(backButton, compactParams(0, 0, 8, 0));
+        toolbar.addView(backButton, compactParams(0, 0, 4, 0));
 
         pageText = text("", 15, COLOR_INK, Typeface.BOLD);
-        pageText.setSingleLine(false);
+        pageText.setSingleLine(true);
+        pageText.setMaxLines(1);
+        pageText.setMinWidth(0);
+        pageText.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -195,11 +228,11 @@ public final class MainActivity extends Activity {
                     showCopyDialog();
                 }
             });
-            toolbar.addView(copyButton, compactParams(8, 0, 6, 0));
+            toolbar.addView(copyButton, compactParams(4, 0, 4, 0));
 
             LinearLayout importantWrap = row();
             importantWrap.setGravity(Gravity.CENTER_VERTICAL);
-            importantButton = iconButton("重要", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+            importantButton = iconButton("🔔", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
             importantButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -215,31 +248,31 @@ public final class MainActivity extends Activity {
             importantBadge.setBackground(rounded(COLOR_DANGER, COLOR_DANGER));
             importantBadge.setVisibility(View.GONE);
             importantWrap.addView(importantBadge, compactParams(3, 0, 0, 0));
-            toolbar.addView(importantWrap, compactParams(0, 0, 6, 0));
+            toolbar.addView(importantWrap, compactParams(0, 0, 4, 0));
         } else {
             importantButton = null;
             importantBadge = null;
         }
 
         Button addButton = iconButton("⊕", COLOR_BRAND, Color.WHITE);
-        addButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        addButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         addButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 showAddDialog();
             }
         });
-        toolbar.addView(addButton, compactParams(8, 0, 6, 0));
+        toolbar.addView(addButton, compactParams(4, 0, 4, 0));
 
         refreshButton = iconButton("↻", COLOR_BRAND, Color.WHITE);
-        refreshButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        refreshButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         refreshButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 refreshNow();
             }
         });
-        toolbar.addView(refreshButton, compactParams(0, 0, 6, 0));
+        toolbar.addView(refreshButton, compactParams(0, 0, 4, 0));
 
         toggleExtraButton = iconButton("列", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
         toggleExtraButton.setOnClickListener(new View.OnClickListener() {
@@ -290,18 +323,43 @@ public final class MainActivity extends Activity {
     }
 
     private void showAboutDialog() {
-        String message = "作者：Facico\n"
-                + "仓库：https://github.com/HxPigGroup/fund_valuation_android\n\n"
-                + "版本更新：\n"
-                + "0.3.0：新增首页关于、个人页复制跟踪列表、长按基金操作、个人提醒规则和重要提醒记录。\n"
-                + "0.2.0：优化移动端列表，固定基金名称列，加入紧凑顶部工具栏。\n"
-                + "0.1.0：创建 Android 原生项目，支持基金跟踪、刷新和缓存。\n\n"
-                + "主要功能：\n"
-                + "公共页面和个人页面分开管理；本地保存基金跟踪列表；刷新官方估算值、今日估值涨跌、昨日增长和近一月增长；个人页面可设置涨跌提醒，并在重要提醒中查看触发情况。";
         new AlertDialog.Builder(this)
                 .setTitle("关于")
+                .setItems(new CharSequence[]{"作者与仓库", "版本更新", "主要功能"}, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        if (which == 0) {
+                            showAboutSection("作者与仓库", "作者：Facico\n仓库：https://github.com/HxPigGroup/fund_valuation_android");
+                        } else if (which == 1) {
+                            showAboutSection("版本更新",
+                                    "0.3.1：压缩顶部工具栏，重要提醒改为铃铛，本机记录最近个人页面，关于页改为分板块查看。\n\n"
+                                            + "0.3.0：新增首页关于、个人页复制跟踪列表、长按基金操作、个人提醒规则和重要提醒记录。\n\n"
+                                            + "0.2.0：优化移动端列表，固定基金名称列，加入紧凑顶部工具栏。\n\n"
+                                            + "0.1.0：创建 Android 原生项目，支持基金跟踪、刷新和缓存。");
+                        } else {
+                            showAboutSection("主要功能",
+                                    "公共页面和个人页面分开管理。\n\n"
+                                            + "本地保存基金跟踪列表，并可从本机最近个人页面快速进入。\n\n"
+                                            + "刷新官方估算值、今日估值涨跌、昨日增长和近一月增长。\n\n"
+                                            + "个人页面可复制公共页面或其他个人页面的跟踪列表。\n\n"
+                                            + "个人页面可设置涨跌提醒，并在铃铛入口查看重要提醒。");
+                        }
+                    }
+                })
+                .show();
+    }
+
+    private void showAboutSection(String title, String message) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
                 .setMessage(message)
-                .setPositiveButton("知道了", null)
+                .setNegativeButton("返回", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        showAboutDialog();
+                    }
+                })
+                .setPositiveButton("关闭", null)
                 .show();
     }
 
@@ -421,7 +479,7 @@ public final class MainActivity extends Activity {
         }
         int count = storage.getTriggeredAlertCount(profile);
         if (count > 0) {
-            importantButton.setText("重要");
+            importantButton.setText("🔔");
             importantButton.setTextColor(Color.rgb(23, 92, 211));
             importantButton.setBackground(rounded(Color.rgb(234, 242, 255), Color.rgb(234, 242, 255)));
             if (importantBadge != null) {
@@ -429,7 +487,7 @@ public final class MainActivity extends Activity {
                 importantBadge.setVisibility(View.VISIBLE);
             }
         } else {
-            importantButton.setText("重要");
+            importantButton.setText("🔔");
             importantButton.setTextColor(Color.rgb(23, 92, 211));
             importantButton.setBackground(rounded(Color.rgb(234, 242, 255), Color.rgb(234, 242, 255)));
             if (importantBadge != null) {
@@ -627,7 +685,7 @@ public final class MainActivity extends Activity {
         }
         storage.evaluateAlerts(profile, storage.getCachedRows(profile));
         render();
-        setStatus("已保存提醒，点“重要”查看触发情况。", false);
+        setStatus("已保存提醒，点铃铛查看触发情况。", false);
     }
 
     private Double parseThreshold(String value) {
@@ -751,7 +809,16 @@ public final class MainActivity extends Activity {
             entryPhoneInput.setError("请输入 11 位手机号");
             return;
         }
-        storage.setCurrentProfile(phone);
+        storage.rememberProfile(phone);
+        showFundScreen();
+    }
+
+    private void enterStoredProfile(String phone) {
+        String normalized = normalizePhone(phone);
+        if (!FundFormat.hasValue(normalized)) {
+            return;
+        }
+        storage.rememberProfile(normalized);
         showFundScreen();
     }
 
@@ -863,11 +930,7 @@ public final class MainActivity extends Activity {
     }
 
     private String normalizePhone(String value) {
-        if (value == null) {
-            return "";
-        }
-        String digits = value.replaceAll("\\D", "");
-        return digits.length() == 11 ? digits : "";
+        return FundStorage.normalizePhone(value);
     }
 
     private String maskPhone(String phone) {
@@ -920,10 +983,12 @@ public final class MainActivity extends Activity {
 
     private Button iconButton(String label, int background, int foreground) {
         Button button = button(label, background, foreground);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        button.setMinWidth(dp(44));
-        button.setMinHeight(dp(40));
-        button.setPadding(dp(6), 0, dp(6), 0);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        button.setMinWidth(dp(34));
+        button.setMinHeight(dp(34));
+        button.setMinimumWidth(dp(34));
+        button.setMinimumHeight(dp(34));
+        button.setPadding(dp(4), 0, dp(4), 0);
         return button;
     }
 
