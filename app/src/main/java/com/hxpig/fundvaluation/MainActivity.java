@@ -189,7 +189,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(10), dp(16), dp(10), dp(28));
+        root.setPadding(dp(10), topSafePadding(), dp(10), dp(28));
         scrollView.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1023,6 +1023,12 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(dp(left), dp(top), dp(right), dp(bottom));
         return params;
+    }
+
+    private int topSafePadding() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        int statusBarHeight = resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : 0;
+        return statusBarHeight + dp(12);
     }
 
     private int dp(float value) {
