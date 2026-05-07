@@ -328,7 +328,8 @@ public final class MainActivity extends Activity {
                             showAboutSection("作者与仓库", "作者：Facico\n仓库：https://github.com/HxPigGroup/fund_valuation_android");
                         } else if (which == 1) {
                             showAboutSection("版本更新",
-                                    "0.3.1：压缩顶部工具栏，重要提醒改为铃铛，本机记录最近个人页面，关于页改为分板块查看。\n\n"
+                                    "0.3.2：新增近 5 个交易日涨跌超 10% 的名称标记，并确保升级后本地个人列表和最近账号继续保留。\n\n"
+                                            + "0.3.1：压缩顶部工具栏，重要提醒改为铃铛，本机记录最近个人页面，关于页改为分板块查看。\n\n"
                                             + "0.3.0：新增首页关于、个人页复制跟踪列表、长按基金操作、个人提醒规则和重要提醒记录。\n\n"
                                             + "0.2.0：优化移动端列表，固定基金名称列，加入紧凑顶部工具栏。\n\n"
                                             + "0.1.0：创建 Android 原生项目，支持基金跟踪、刷新和缓存。");
