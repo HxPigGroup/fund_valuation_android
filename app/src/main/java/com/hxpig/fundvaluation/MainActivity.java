@@ -9,12 +9,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.TextUtils;
 import android.text.InputType;
-import android.text.SpannableString;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.RelativeSizeSpan;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -517,7 +513,7 @@ public final class MainActivity extends Activity {
 
         if (rows.isEmpty()) {
             TableRow fixedEmpty = new TableRow(this);
-            TextView nameCell = nameCell("当前没有跟踪的基金。", "");
+            View nameCell = nameCell("当前没有跟踪的基金。", "", FundFormat.BLANK);
             fixedEmpty.addView(nameCell);
             fixedTable.addView(fixedEmpty);
 
@@ -531,7 +527,7 @@ public final class MainActivity extends Activity {
         for (final FundRow row : rows) {
             TableRow fixedRow = new TableRow(this);
             String name = FundFormat.hasValue(row.name) ? row.name : row.code;
-            TextView fixedNameCell = nameCell(name, row.code);
+            View fixedNameCell = nameCell(name, row.code, row.fiveDayGrowth);
             attachFundLongPress(fixedNameCell, row);
             fixedRow.setOnLongClickListener(fundLongClickListener(row));
             fixedRow.addView(fixedNameCell);
@@ -551,26 +547,36 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private TextView nameCell(String name, String code) {
+    private View nameCell(String name, String code, String fiveDayGrowth) {
         String safeName = FundFormat.orBlank(name);
         String safeCode = FundFormat.hasValue(code) ? code : "";
-        String text = safeCode.length() == 0 ? safeName : safeName + "\n" + safeCode;
-        SpannableString span = new SpannableString(text);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setLayoutParams(new TableRow.LayoutParams(dp(NAME_COL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT));
+        layout.setMinimumWidth(dp(NAME_COL_WIDTH_DP));
+        layout.setMinimumHeight(dp(ROW_MIN_HEIGHT_DP));
+        layout.setGravity(Gravity.CENTER_VERTICAL);
+        layout.setPadding(dp(10), dp(8), dp(10), dp(8));
+        layout.setBackground(rounded(Color.WHITE, Color.rgb(234, 236, 240)));
+
+        TextView nameView = text(safeName, 13, COLOR_INK, Typeface.BOLD);
+        nameView.setSingleLine(false);
+        layout.addView(nameView);
+
         if (safeCode.length() > 0) {
-            int start = text.length() - safeCode.length();
-            span.setSpan(new RelativeSizeSpan(0.78f), start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            span.setSpan(new ForegroundColorSpan(COLOR_MUTED), start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            TextView codeView = text(safeCode, 11, COLOR_MUTED, Typeface.NORMAL);
+            layout.addView(codeView, compactParams(0, 2, 0, 0));
         }
-        TextView view = text("", 13, COLOR_INK, Typeface.BOLD);
-        view.setText(span);
-        view.setWidth(dp(NAME_COL_WIDTH_DP));
-        view.setMaxWidth(dp(NAME_COL_WIDTH_DP));
-        view.setMinHeight(dp(ROW_MIN_HEIGHT_DP));
-        view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setPadding(dp(10), dp(8), dp(10), dp(8));
-        view.setSingleLine(false);
-        view.setBackground(rounded(Color.WHITE, Color.rgb(234, 236, 240)));
-        return view;
+
+        String badgeText = fiveDayBadgeText(fiveDayGrowth);
+        if (FundFormat.hasValue(badgeText)) {
+            int tone = fiveDayBadgeColor(fiveDayGrowth);
+            TextView badgeView = text(badgeText, 10, tone, Typeface.BOLD);
+            badgeView.setPadding(dp(6), dp(3), dp(6), dp(3));
+            badgeView.setBackground(rounded(Color.WHITE, tone));
+            layout.addView(badgeView, compactParams(0, 6, 0, 0));
+        }
+        return layout;
     }
 
     private TextView headerCell(String text, int widthDp, int gravity) {
@@ -927,6 +933,28 @@ public final class MainActivity extends Activity {
             return COLOR_DOWN;
         }
         return COLOR_INK;
+    }
+
+    private String fiveDayBadgeText(String value) {
+        Double number = FundFormat.parseNumber(value);
+        if (number == null) {
+            return "";
+        }
+        if (number > 10.0) {
+            return "近5天涨>10%";
+        }
+        if (number < -10.0) {
+            return "近5天下跌>10%";
+        }
+        return "";
+    }
+
+    private int fiveDayBadgeColor(String value) {
+        Double number = FundFormat.parseNumber(value);
+        if (number == null) {
+            return COLOR_MUTED;
+        }
+        return number > 0 ? COLOR_UP : COLOR_DOWN;
     }
 
     private String normalizePhone(String value) {

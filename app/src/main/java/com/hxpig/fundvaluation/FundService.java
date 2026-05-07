@@ -137,10 +137,22 @@ final class FundService {
         }
 
         Double latestValue = FundFormat.parseNumber(latestNav);
+        Double fiveDayStartValue = findFiveDayStartValue(list);
+        if (latestValue != null && fiveDayStartValue != null && fiveDayStartValue != 0.0) {
+            row.fiveDayGrowth = FundFormat.percentFromNumber((latestValue / fiveDayStartValue - 1.0) * 100.0);
+        }
         Double startValue = findMonthStartValue(list, latest.optString("FSRQ", ""));
         if (latestValue != null && startValue != null && startValue != 0.0) {
             row.monthGrowth = FundFormat.percentFromNumber((latestValue / startValue - 1.0) * 100.0);
         }
+    }
+
+    private Double findFiveDayStartValue(JSONArray list) {
+        if (list == null || list.length() <= 5) {
+            return null;
+        }
+        JSONObject item = list.optJSONObject(5);
+        return item == null ? null : FundFormat.parseNumber(item.optString("DWJZ", ""));
     }
 
     private Double findMonthStartValue(JSONArray list, String latestDateText) {

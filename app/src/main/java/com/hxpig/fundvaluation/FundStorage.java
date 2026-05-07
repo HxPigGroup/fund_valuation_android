@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 final class FundStorage {
     private static final String PREFS_NAME = "fund_valuation";
@@ -30,6 +31,7 @@ final class FundStorage {
         this.context = context.getApplicationContext();
         this.prefs = this.context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         seedPublicProfileIfNeeded();
+        migrateRecentProfilesIfNeeded();
     }
 
     String getCurrentProfile() {
@@ -219,6 +221,35 @@ final class FundStorage {
             return;
         }
         prefs.edit().putString(key, readDefaultCodes()).apply();
+    }
+
+    private void migrateRecentProfilesIfNeeded() {
+        if (prefs.contains(KEY_RECENT_PROFILES)) {
+            return;
+        }
+        List<String> recent = new ArrayList<>();
+        String currentProfile = normalizePhone(prefs.getString(KEY_PROFILE, ""));
+        if (FundFormat.hasValue(currentProfile)) {
+            recent.add(currentProfile);
+        }
+        Set<String> keys = prefs.getAll().keySet();
+        for (String key : keys) {
+            if (!key.startsWith("codes_phone_")) {
+                continue;
+            }
+            String phone = normalizePhone(key.substring("codes_phone_".length()));
+            if (FundFormat.hasValue(phone) && !recent.contains(phone)) {
+                recent.add(phone);
+            }
+        }
+        if (recent.isEmpty()) {
+            return;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String phone : recent) {
+            builder.append(phone).append('\n');
+        }
+        prefs.edit().putString(KEY_RECENT_PROFILES, builder.toString()).apply();
     }
 
     private String readDefaultCodes() {

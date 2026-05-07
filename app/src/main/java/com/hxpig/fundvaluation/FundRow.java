@@ -10,6 +10,7 @@ final class FundRow {
     String estimateGrowth = FundFormat.BLANK;
     String publishedNav = FundFormat.BLANK;
     String publishedGrowth = FundFormat.BLANK;
+    String fiveDayGrowth = FundFormat.BLANK;
     String monthGrowth = FundFormat.BLANK;
     String selfEstimateValue = FundFormat.BLANK;
     String selfEstimateGrowth = FundFormat.BLANK;
@@ -29,6 +30,7 @@ final class FundRow {
         object.put("estimateGrowth", estimateGrowth);
         object.put("publishedNav", publishedNav);
         object.put("publishedGrowth", publishedGrowth);
+        object.put("fiveDayGrowth", fiveDayGrowth);
         object.put("monthGrowth", monthGrowth);
         object.put("selfEstimateValue", selfEstimateValue);
         object.put("selfEstimateGrowth", selfEstimateGrowth);
@@ -45,6 +47,7 @@ final class FundRow {
         row.estimateGrowth = object.optString("estimateGrowth", FundFormat.BLANK);
         row.publishedNav = object.optString("publishedNav", FundFormat.BLANK);
         row.publishedGrowth = object.optString("publishedGrowth", FundFormat.BLANK);
+        row.fiveDayGrowth = object.optString("fiveDayGrowth", FundFormat.BLANK);
         row.monthGrowth = object.optString("monthGrowth", FundFormat.BLANK);
         row.selfEstimateValue = object.optString("selfEstimateValue", FundFormat.BLANK);
         row.selfEstimateGrowth = object.optString("selfEstimateGrowth", FundFormat.BLANK);
