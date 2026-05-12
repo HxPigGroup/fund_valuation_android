@@ -2,11 +2,20 @@ package com.hxpig.fundvaluation;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
@@ -29,10 +38,18 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
+    private static final String UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/latest.json";
     private static final int COLOR_BG = Color.rgb(245, 247, 251);
     private static final int COLOR_CARD = Color.WHITE;
     private static final int COLOR_INK = Color.rgb(16, 24, 40);
@@ -42,7 +59,7 @@ public final class MainActivity extends Activity {
     private static final int COLOR_DANGER = Color.rgb(217, 45, 32);
     private static final int COLOR_UP = Color.rgb(217, 45, 32);
     private static final int COLOR_DOWN = Color.rgb(2, 122, 72);
-    private static final int NAME_COL_WIDTH_DP = 136;
+    private static final int NAME_COL_WIDTH_DP = 168;
     private static final int ROW_MIN_HEIGHT_DP = 72;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -50,6 +67,8 @@ public final class MainActivity extends Activity {
 
     private Handler mainHandler;
     private FundStorage storage;
+    private AlertDialog checkingUpdateDialog;
+    private long updateDownloadId = -1L;
     private EditText entryPhoneInput;
     private TextView pageText;
     private TextView statusText;
@@ -62,12 +81,32 @@ public final class MainActivity extends Activity {
     private boolean refreshing;
     private boolean showExtraColumns;
     private boolean onEntryScreen = true;
+    private final BroadcastReceiver downloadReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context context, Intent intent) {
+            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
+                return;
+            }
+            long downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
+            if (downloadId != updateDownloadId) {
+                return;
+            }
+            updateDownloadId = -1L;
+            handleDownloadedUpdate(downloadId);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mainHandler = new Handler(Looper.getMainLooper());
         storage = new FundStorage(this);
+        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(downloadReceiver, filter, RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(downloadReceiver, filter);
+        }
         showEntryScreen();
     }
 
@@ -82,6 +121,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        unregisterReceiver(downloadReceiver);
         executor.shutdownNow();
         super.onDestroy();
     }
@@ -171,7 +211,16 @@ public final class MainActivity extends Activity {
                 showAboutDialog();
             }
         });
-        card.addView(aboutButton);
+        card.addView(aboutButton, blockParams(0, 0, 0, 8));
+
+        Button updateButton = button("查找更新", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+        updateButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                checkForUpdates();
+            }
+        });
+        card.addView(updateButton);
 
         setContentView(scrollView);
     }
@@ -321,14 +370,15 @@ public final class MainActivity extends Activity {
     private void showAboutDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("关于")
-                .setItems(new CharSequence[]{"作者与仓库", "版本更新", "主要功能"}, new DialogInterface.OnClickListener() {
+                .setItems(new CharSequence[]{"作者与仓库", "版本更新记录", "主要功能"}, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int which) {
                         if (which == 0) {
                             showAboutSection("作者与仓库", "作者：Facico\n仓库：https://github.com/HxPigGroup/fund_valuation_android");
                         } else if (which == 1) {
-                            showAboutSection("版本更新",
-                                    "0.3.2：新增近 5 个交易日涨跌超 10% 的名称标记，并确保升级后本地个人列表和最近账号继续保留。\n\n"
+                            showAboutSection("版本更新记录",
+                                    "0.4.1：增加主页查找更新，可与服务端版本对齐并下载最新 APK。\n\n"
+                                            + "0.3.2：新增近 5 个交易日涨跌超 10% 的名称标记，并确保升级后本地个人列表和最近账号继续保留。\n\n"
                                             + "0.3.1：压缩顶部工具栏，重要提醒改为铃铛，本机记录最近个人页面，关于页改为分板块查看。\n\n"
                                             + "0.3.0：新增首页关于、个人页复制跟踪列表、长按基金操作、个人提醒规则和重要提醒记录。\n\n"
                                             + "0.2.0：优化移动端列表，固定基金名称列，加入紧凑顶部工具栏。\n\n"
@@ -344,6 +394,199 @@ public final class MainActivity extends Activity {
                     }
                 })
                 .show();
+    }
+
+    private void checkForUpdates() {
+        if (checkingUpdateDialog != null && checkingUpdateDialog.isShowing()) {
+            return;
+        }
+        checkingUpdateDialog = new AlertDialog.Builder(this)
+                .setTitle("查找更新")
+                .setMessage("正在检查最新版本...")
+                .setCancelable(false)
+                .create();
+        checkingUpdateDialog.show();
+
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                final AppUpdateInfo[] info = new AppUpdateInfo[]{null};
+                final String[] error = new String[]{""};
+                try {
+                    info[0] = fetchUpdateInfo();
+                } catch (Exception exception) {
+                    error[0] = exception.getMessage() == null ? "检查失败" : exception.getMessage();
+                }
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (checkingUpdateDialog != null) {
+                            checkingUpdateDialog.dismiss();
+                            checkingUpdateDialog = null;
+                        }
+                        if (FundFormat.hasValue(error[0])) {
+                            new AlertDialog.Builder(MainActivity.this)
+                                    .setTitle("查找更新")
+                                    .setMessage("更新检查失败：" + error[0])
+                                    .setPositiveButton("知道了", null)
+                                    .show();
+                            return;
+                        }
+                        showUpdateResult(info[0]);
+                    }
+                });
+            }
+        });
+    }
+
+    private AppUpdateInfo fetchUpdateInfo() throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(UPDATE_MANIFEST_URL + "?t=" + System.currentTimeMillis()).openConnection();
+        connection.setConnectTimeout(9000);
+        connection.setReadTimeout(9000);
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) FundValuationAndroid/1.0");
+        try {
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String body = readText(stream);
+            if (status >= 400) {
+                throw new IOException("HTTP " + status);
+            }
+            return AppUpdateInfo.fromJson(body);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private String readText(InputStream stream) throws IOException {
+        if (stream == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+        }
+        return builder.toString();
+    }
+
+    private void showUpdateResult(final AppUpdateInfo updateInfo) {
+        if (updateInfo == null || !FundFormat.hasValue(updateInfo.versionName) || !FundFormat.hasValue(updateInfo.apkUrl)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("查找更新")
+                    .setMessage("服务端没有返回有效的更新信息。")
+                    .setPositiveButton("知道了", null)
+                    .show();
+            return;
+        }
+        if (updateInfo.versionCode <= currentVersionCode()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("查找更新")
+                    .setMessage("当前已是最新版本 " + currentVersionName() + "。")
+                    .setPositiveButton("知道了", null)
+                    .show();
+            return;
+        }
+        String message = "检测到有最新版本 " + updateInfo.versionName + "，是否要进行更新？";
+        if (FundFormat.hasValue(updateInfo.notes)) {
+            message += "\n\n" + updateInfo.notes;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("查找更新")
+                .setMessage(message)
+                .setNegativeButton("暂不更新", null)
+                .setPositiveButton("立即更新", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int which) {
+                        downloadLatestUpdate(updateInfo);
+                    }
+                })
+                .show();
+    }
+
+    private void downloadLatestUpdate(AppUpdateInfo updateInfo) {
+        DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        if (manager == null) {
+            new AlertDialog.Builder(this)
+                    .setTitle("查找更新")
+                    .setMessage("当前设备不支持下载管理器。")
+                    .setPositiveButton("知道了", null)
+                    .show();
+            return;
+        }
+        Uri uri = Uri.parse(updateInfo.apkUrl);
+        DownloadManager.Request request = new DownloadManager.Request(uri);
+        request.setTitle("基金估值跟踪 " + updateInfo.versionName);
+        request.setDescription("正在下载最新更新");
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "fund-valuation-android-" + updateInfo.versionName + ".apk");
+        updateDownloadId = manager.enqueue(request);
+        new AlertDialog.Builder(this)
+                .setTitle("查找更新")
+                .setMessage("已开始下载最新版本，下载完成后会提示安装。")
+                .setPositiveButton("知道了", null)
+                .show();
+    }
+
+    private void handleDownloadedUpdate(long downloadId) {
+        DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+        if (manager == null) {
+            return;
+        }
+        DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+        Cursor cursor = manager.query(query);
+        if (cursor == null) {
+            return;
+        }
+        try {
+            if (!cursor.moveToFirst()) {
+                return;
+            }
+            int status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+            if (status != DownloadManager.STATUS_SUCCESSFUL) {
+                new AlertDialog.Builder(this)
+                        .setTitle("查找更新")
+                        .setMessage("更新下载失败，请稍后重试。")
+                        .setPositiveButton("知道了", null)
+                        .show();
+                return;
+            }
+            Uri uri = manager.getUriForDownloadedFile(downloadId);
+            if (uri == null) {
+                new AlertDialog.Builder(this)
+                        .setTitle("查找更新")
+                        .setMessage("更新已下载完成，但无法自动打开安装包。")
+                        .setPositiveButton("知道了", null)
+                        .show();
+                return;
+            }
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(intent);
+        } finally {
+            cursor.close();
+        }
+    }
+
+    private int currentVersionCode() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionCode;
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private String currentVersionName() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return info.versionName == null ? "未知版本" : info.versionName;
+        } catch (Exception ignored) {
+            return "未知版本";
+        }
     }
 
     private void showAboutSection(String title, String message) {
@@ -564,18 +807,24 @@ public final class MainActivity extends Activity {
         nameView.setSingleLine(false);
         layout.addView(nameView);
 
-        if (safeCode.length() > 0) {
-            TextView codeView = text(safeCode, 11, COLOR_MUTED, Typeface.NORMAL);
-            layout.addView(codeView, compactParams(0, 2, 0, 0));
-        }
-
         String badgeText = fiveDayBadgeText(fiveDayGrowth);
-        if (FundFormat.hasValue(badgeText)) {
-            int tone = fiveDayBadgeColor(fiveDayGrowth);
-            TextView badgeView = text(badgeText, 10, tone, Typeface.BOLD);
-            badgeView.setPadding(dp(6), dp(3), dp(6), dp(3));
-            badgeView.setBackground(rounded(Color.WHITE, tone));
-            layout.addView(badgeView, compactParams(0, 6, 0, 0));
+        if (safeCode.length() > 0 || FundFormat.hasValue(badgeText)) {
+            LinearLayout metaRow = row();
+            metaRow.setGravity(Gravity.CENTER_VERTICAL);
+            layout.addView(metaRow, compactParams(0, 3, 0, 0));
+
+            if (safeCode.length() > 0) {
+                TextView codeView = text(safeCode, 11, COLOR_MUTED, Typeface.NORMAL);
+                metaRow.addView(codeView, compactParams(0, 0, 0, 0));
+            }
+
+            if (FundFormat.hasValue(badgeText)) {
+                int tone = fiveDayBadgeColor(fiveDayGrowth);
+                TextView badgeView = text(badgeText, 10, tone, Typeface.BOLD);
+                badgeView.setPadding(dp(5), dp(2), dp(5), dp(2));
+                badgeView.setBackground(rounded(Color.WHITE, tone));
+                metaRow.addView(badgeView, compactParams(safeCode.length() > 0 ? 6 : 0, 0, 0, 0));
+            }
         }
         return layout;
     }
