@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "0.4.1",
-  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.1.apk",
-  "notes": "0.4.1: 增加主页查找更新，可与服务端版本对齐并下载最新 APK。"
+  "versionCode": 7,
+  "versionName": "0.4.2",
+  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.2.apk",
+  "notes": "0.4.2: 官方估值主接口与网页端对齐，旧逐基金接口仅作为缺失数据的兜底。"
 }

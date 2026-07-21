@@ -1,5 +1,7 @@
 package com.hxpig.fundvaluation;
 
+import android.util.JsonReader;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -17,8 +19,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -27,11 +33,16 @@ import java.util.concurrent.Future;
 
 final class FundService {
     private static final int TIMEOUT_MS = 9000;
+    private static final int ESTIMATION_PAGE_SIZE = 20000;
+    private static final int MAX_ESTIMATION_PAGES = 5;
     private static final String USER_AGENT = "Mozilla/5.0 (Linux; Android) FundValuationAndroid/1.0";
     private static final long THIRTY_DAYS_MS = 30L * 24L * 60L * 60L * 1000L;
+    private static final String ESTIMATION_LIST_URL =
+            "https://api.fund.eastmoney.com/FundGuZhi/GetFundGZList";
 
     List<FundRow> fetchRows(List<String> codes) {
         List<FundRow> rows = new ArrayList<>();
+        Map<String, FundRow> officialEstimates = fetchOfficialEstimateMap(codes);
         int workerCount = Math.min(4, Math.max(1, codes.size()));
         ExecutorService pool = Executors.newFixedThreadPool(workerCount);
         List<Future<FundRow>> futures = new ArrayList<>();
@@ -39,7 +50,7 @@ final class FundService {
             futures.add(pool.submit(new Callable<FundRow>() {
                 @Override
                 public FundRow call() {
-                    return fetchRow(code);
+                    return fetchRow(code, officialEstimates.get(code));
                 }
             }));
         }
@@ -81,13 +92,15 @@ final class FundService {
         return row;
     }
 
-    private FundRow fetchRow(String code) {
-        FundRow row = new FundRow(code);
+    private FundRow fetchRow(String code, FundRow officialEstimate) {
+        FundRow row = officialEstimate == null ? new FundRow(code) : officialEstimate;
         List<String> warnings = new ArrayList<>();
-        try {
-            fetchOfficialEstimate(row);
-        } catch (IOException | JSONException exception) {
-            warnings.add("官方估算接口失败");
+        if (!FundFormat.hasValue(row.estimateValue)) {
+            try {
+                fetchOfficialEstimateFallback(row);
+            } catch (IOException | JSONException exception) {
+                warnings.add("官方估算暂无数据");
+            }
         }
         try {
             fetchHistory(row);
@@ -103,7 +116,157 @@ final class FundService {
         return row;
     }
 
-    private void fetchOfficialEstimate(FundRow row) throws IOException, JSONException {
+    private Map<String, FundRow> fetchOfficialEstimateMap(List<String> codes) {
+        Map<String, FundRow> estimates = new HashMap<>();
+        Set<String> missingCodes = new HashSet<>(codes);
+        for (int page = 1; page <= MAX_ESTIMATION_PAGES && !missingCodes.isEmpty(); page++) {
+            try {
+                int itemCount = fetchOfficialEstimatePage(page, missingCodes, estimates);
+                if (itemCount < ESTIMATION_PAGE_SIZE) {
+                    break;
+                }
+            } catch (IOException | IllegalStateException ignored) {
+                // A list failure should not prevent the per-fund fallback below.
+                break;
+            }
+        }
+        return estimates;
+    }
+
+    private int fetchOfficialEstimatePage(
+            int page,
+            Set<String> missingCodes,
+            Map<String, FundRow> estimates
+    ) throws IOException {
+        String url = ESTIMATION_LIST_URL
+                + "?type=1&sort=3&orderType=desc&canbuy=0&pageIndex=" + page
+                + "&pageSize=" + ESTIMATION_PAGE_SIZE + "&_="
+                + System.currentTimeMillis();
+        HttpURLConnection connection = openConnection(url, "https://fund.eastmoney.com/");
+        try {
+            int status = connection.getResponseCode();
+            if (status >= 400) {
+                throw new IOException("HTTP " + status);
+            }
+            try (InputStream stream = connection.getInputStream();
+                 JsonReader reader = new JsonReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                return readEstimationResponse(reader, missingCodes, estimates);
+            }
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private int readEstimationResponse(
+            JsonReader reader,
+            Set<String> missingCodes,
+            Map<String, FundRow> estimates
+    ) throws IOException {
+        int itemCount = 0;
+        reader.beginObject();
+        while (reader.hasNext()) {
+            if ("Data".equals(reader.nextName())) {
+                itemCount = readEstimationData(reader, missingCodes, estimates);
+            } else {
+                reader.skipValue();
+            }
+        }
+        reader.endObject();
+        return itemCount;
+    }
+
+    private int readEstimationData(
+            JsonReader reader,
+            Set<String> missingCodes,
+            Map<String, FundRow> estimates
+    ) throws IOException {
+        int itemCount = 0;
+        reader.beginObject();
+        while (reader.hasNext()) {
+            if ("list".equals(reader.nextName())) {
+                reader.beginArray();
+                while (reader.hasNext()) {
+                    itemCount++;
+                    FundRow row = readEstimationItem(reader, missingCodes);
+                    if (row != null) {
+                        estimates.put(row.code, row);
+                        missingCodes.remove(row.code);
+                    }
+                }
+                reader.endArray();
+            } else {
+                reader.skipValue();
+            }
+        }
+        reader.endObject();
+        return itemCount;
+    }
+
+    private FundRow readEstimationItem(JsonReader reader, Set<String> missingCodes) throws IOException {
+        String code = "";
+        String name = "";
+        String estimateValue = "";
+        String estimateGrowth = "";
+        String publishedNav = "";
+        String publishedGrowth = "";
+        String estimateDate = "";
+        String navDate = "";
+
+        reader.beginObject();
+        while (reader.hasNext()) {
+            String field = reader.nextName();
+            if ("bzdm".equals(field)) {
+                code = readString(reader);
+            } else if ("jjjc".equals(field)) {
+                name = readString(reader);
+            } else if ("gsz".equals(field)) {
+                estimateValue = readString(reader);
+            } else if ("gszzl".equals(field)) {
+                estimateGrowth = readString(reader);
+            } else if ("dwjz".equals(field)) {
+                publishedNav = readString(reader);
+            } else if ("jzzzl".equals(field)) {
+                publishedGrowth = readString(reader);
+            } else if ("gxrq".equals(field)) {
+                estimateDate = readString(reader);
+            } else if ("gzrq".equals(field)) {
+                navDate = readString(reader);
+            } else {
+                reader.skipValue();
+            }
+        }
+        reader.endObject();
+
+        if (!missingCodes.contains(code) || !FundFormat.hasValue(estimateValue)) {
+            return null;
+        }
+        FundRow row = new FundRow(code);
+        row.name = FundFormat.orBlank(name);
+        row.estimateValue = FundFormat.value4(estimateValue);
+        row.estimateGrowth = FundFormat.percent(estimateGrowth);
+        row.publishedNav = FundFormat.value4(publishedNav);
+        row.publishedGrowth = FundFormat.percent(publishedGrowth);
+        row.estimateTime = estimateDate;
+        row.navDate = navDate;
+        return row;
+    }
+
+    private String readString(JsonReader reader) throws IOException {
+        switch (reader.peek()) {
+            case NULL:
+                reader.nextNull();
+                return "";
+            case STRING:
+                return reader.nextString();
+            case NUMBER:
+                return reader.nextString();
+            default:
+                reader.skipValue();
+                return "";
+        }
+    }
+
+    private void fetchOfficialEstimateFallback(FundRow row) throws IOException, JSONException {
         String url = "https://fundgz.1234567.com.cn/js/" + row.code + ".js?rt=" + System.currentTimeMillis();
         String text = get(url, "https://fund.eastmoney.com/");
         JSONObject payload = parseJsonp(text);
@@ -195,12 +358,7 @@ final class FundService {
     }
 
     private String get(String urlText, String referer) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setConnectTimeout(TIMEOUT_MS);
-        connection.setReadTimeout(TIMEOUT_MS);
-        connection.setRequestProperty("User-Agent", USER_AGENT);
-        connection.setRequestProperty("Accept", "application/json,text/javascript,*/*;q=0.8");
-        connection.setRequestProperty("Referer", referer);
+        HttpURLConnection connection = openConnection(urlText, referer);
         try {
             int status = connection.getResponseCode();
             InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
@@ -212,6 +370,16 @@ final class FundService {
         } finally {
             connection.disconnect();
         }
+    }
+
+    private HttpURLConnection openConnection(String urlText, String referer) throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
+        connection.setConnectTimeout(TIMEOUT_MS);
+        connection.setReadTimeout(TIMEOUT_MS);
+        connection.setRequestProperty("User-Agent", USER_AGENT);
+        connection.setRequestProperty("Accept", "application/json,text/javascript,*/*;q=0.8");
+        connection.setRequestProperty("Referer", referer);
+        return connection;
     }
 
     private String readStream(InputStream stream) throws IOException {

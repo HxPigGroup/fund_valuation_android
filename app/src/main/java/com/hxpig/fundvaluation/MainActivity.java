@@ -1,5 +1,6 @@
 package com.hxpig.fundvaluation;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
@@ -97,6 +98,7 @@ public final class MainActivity extends Activity {
     };
 
     @Override
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mainHandler = new Handler(Looper.getMainLooper());
