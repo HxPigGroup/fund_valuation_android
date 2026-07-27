@@ -379,7 +379,7 @@ public final class MainActivity extends Activity {
                             showAboutSection("作者与仓库", "作者：Facico\n仓库：https://github.com/HxPigGroup/fund_valuation_android");
                         } else if (which == 1) {
                             showAboutSection("版本更新记录",
-                                    "0.4.3：同步网页版近期更新，官方估算为空时提示查看扩展列中的自算估值。\n\n"
+                                    "0.4.4：同步网页端的自算估值逻辑，使用历史净值和持仓日线校准自算值。\n\n"
                                             + "0.4.2：官方估值主接口与网页端对齐，旧逐基金接口仅作为缺失数据的兜底。\n\n"
                                             + "0.4.1：增加主页查找更新，可与服务端版本对齐并下载最新 APK。\n\n"
                                             + "0.3.2：新增近 5 个交易日涨跌超 10% 的名称标记，并确保升级后本地个人列表和最近账号继续保留。\n\n"
@@ -391,7 +391,7 @@ public final class MainActivity extends Activity {
                             showAboutSection("主要功能",
                                     "公共页面和个人页面分开管理。\n\n"
                                             + "本地保存基金跟踪列表，并可从本机最近个人页面快速进入。\n\n"
-                                            + "刷新官方估算值、今日估值涨跌、昨日增长和近一月增长。\n\n"
+                                            + "刷新官方估算值、今日估值涨跌、自算估值、昨日增长和近一月增长。\n\n"
                                             + "个人页面可复制公共页面或其他个人页面的跟踪列表。\n\n"
                                             + "个人页面可设置涨跌提醒，并在铃铛入口查看重要提醒。");
                         }
