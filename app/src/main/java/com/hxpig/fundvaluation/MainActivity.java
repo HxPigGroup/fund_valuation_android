@@ -321,7 +321,7 @@ public final class MainActivity extends Activity {
         });
         toolbar.addView(refreshButton, compactParams(0, 0, 4, 0));
 
-        toggleExtraButton = iconButton("列", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
+        toggleExtraButton = iconButton("扩展", Color.rgb(234, 242, 255), Color.rgb(23, 92, 211));
         toggleExtraButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -379,7 +379,9 @@ public final class MainActivity extends Activity {
                             showAboutSection("作者与仓库", "作者：Facico\n仓库：https://github.com/HxPigGroup/fund_valuation_android");
                         } else if (which == 1) {
                             showAboutSection("版本更新记录",
-                                    "0.4.1：增加主页查找更新，可与服务端版本对齐并下载最新 APK。\n\n"
+                                    "0.4.3：同步网页版近期更新，官方估算为空时提示查看扩展列中的自算估值。\n\n"
+                                            + "0.4.2：官方估值主接口与网页端对齐，旧逐基金接口仅作为缺失数据的兜底。\n\n"
+                                            + "0.4.1：增加主页查找更新，可与服务端版本对齐并下载最新 APK。\n\n"
                                             + "0.3.2：新增近 5 个交易日涨跌超 10% 的名称标记，并确保升级后本地个人列表和最近账号继续保留。\n\n"
                                             + "0.3.1：压缩顶部工具栏，重要提醒改为铃铛，本机记录最近个人页面，关于页改为分板块查看。\n\n"
                                             + "0.3.0：新增首页关于、个人页复制跟踪列表、长按基金操作、个人提醒规则和重要提醒记录。\n\n"
@@ -710,7 +712,7 @@ public final class MainActivity extends Activity {
         refreshButton.setText(refreshing ? "…" : "↻");
         refreshButton.setEnabled(!refreshing);
         refreshButton.setBackground(rounded(refreshing ? COLOR_MUTED : COLOR_BRAND, refreshing ? COLOR_MUTED : COLOR_BRAND));
-        toggleExtraButton.setText(showExtraColumns ? "简" : "列");
+        toggleExtraButton.setText(showExtraColumns ? "收起" : "扩展");
         updateImportantButton(profile);
         renderTable(rows);
     }
@@ -781,8 +783,8 @@ public final class MainActivity extends Activity {
 
             TableRow scrollRow = new TableRow(this);
             scrollRow.setOnLongClickListener(fundLongClickListener(row));
-            attachFundLongPress(addCell(scrollRow, row.estimateGrowth, 104, toneColor(row.estimateGrowth), Typeface.BOLD), row);
-            attachFundLongPress(addCell(scrollRow, row.estimateValue, 104, COLOR_INK, Typeface.NORMAL), row);
+            attachFundLongPress(addEstimateGrowthCell(scrollRow, row), row);
+            attachFundLongPress(addEstimateValueCell(scrollRow, row), row);
             if (showExtraColumns) {
                 attachFundLongPress(addCell(scrollRow, row.selfEstimateValue, 96, COLOR_MUTED, Typeface.NORMAL), row);
                 attachFundLongPress(addCell(scrollRow, row.selfEstimateGrowth, 96, toneColor(row.selfEstimateGrowth), Typeface.NORMAL), row);
@@ -834,6 +836,22 @@ public final class MainActivity extends Activity {
     private TextView headerCell(String text, int widthDp, int gravity) {
         TextView view = cell(text, widthDp, COLOR_MUTED, Typeface.BOLD, gravity);
         view.setBackgroundColor(Color.rgb(248, 250, 252));
+        return view;
+    }
+
+    private TextView addEstimateValueCell(TableRow row, FundRow fundRow) {
+        TextView view = cell(FundFormat.orBlank(fundRow.estimateValue), 104, COLOR_INK, Typeface.NORMAL, Gravity.CENTER);
+        row.addView(view);
+        return view;
+    }
+
+    private TextView addEstimateGrowthCell(TableRow row, FundRow fundRow) {
+        String value = FundFormat.orBlank(fundRow.estimateGrowth);
+        if (!FundFormat.hasValue(fundRow.estimateGrowth) && !FundFormat.hasValue(fundRow.estimateValue)) {
+            value = "暂无官方估算\n点扩展列看自算";
+        }
+        TextView view = cell(value, 104, FundFormat.hasValue(fundRow.estimateGrowth) ? toneColor(fundRow.estimateGrowth) : COLOR_MUTED, Typeface.BOLD, Gravity.CENTER);
+        row.addView(view);
         return view;
     }
 
