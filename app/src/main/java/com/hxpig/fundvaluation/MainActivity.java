@@ -840,17 +840,33 @@ public final class MainActivity extends Activity {
     }
 
     private TextView addEstimateValueCell(TableRow row, FundRow fundRow) {
-        TextView view = cell(FundFormat.orBlank(fundRow.estimateValue), 104, COLOR_INK, Typeface.NORMAL, Gravity.CENTER);
+        String value = FundFormat.orBlank(fundRow.estimateValue);
+        int color = COLOR_INK;
+        // 如果没有官方估值但有自算估值，显示自算估值并用特殊颜色标注
+        if (!FundFormat.hasValue(value) && FundFormat.hasValue(fundRow.selfEstimateValue)) {
+            value = fundRow.selfEstimateValue;
+            color = COLOR_MUTED;  // 用灰色表示自算
+        }
+        TextView view = cell(value, 104, color, Typeface.NORMAL, Gravity.CENTER);
         row.addView(view);
         return view;
     }
 
     private TextView addEstimateGrowthCell(TableRow row, FundRow fundRow) {
         String value = FundFormat.orBlank(fundRow.estimateGrowth);
-        if (!FundFormat.hasValue(fundRow.estimateGrowth) && !FundFormat.hasValue(fundRow.estimateValue)) {
-            value = "暂无官方估算\n点扩展列看自算";
+        int color = COLOR_INK;
+        // 如果没有官方涨跌但有自算涨跌，显示自算涨跌
+        if (!FundFormat.hasValue(value)) {
+            if (FundFormat.hasValue(fundRow.selfEstimateGrowth)) {
+                value = fundRow.selfEstimateGrowth;
+                color = toneColor(fundRow.selfEstimateGrowth);
+            } else {
+                value = "暂无估算";
+            }
+        } else {
+            color = toneColor(fundRow.estimateGrowth);
         }
-        TextView view = cell(value, 104, FundFormat.hasValue(fundRow.estimateGrowth) ? toneColor(fundRow.estimateGrowth) : COLOR_MUTED, Typeface.BOLD, Gravity.CENTER);
+        TextView view = cell(value, 104, color, Typeface.BOLD, Gravity.CENTER);
         row.addView(view);
         return view;
     }

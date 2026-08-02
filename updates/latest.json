@@ -1,6 +1,6 @@
 {
-  "versionCode": 9,
-  "versionName": "0.4.4",
-  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.4.apk",
-  "notes": "0.4.4: 安卓端同步网页端的自算估值逻辑，使用历史净值和持仓日线校准自算值。"
+  "versionCode": 10,
+  "versionName": "0.4.5",
+  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.5.apk",
+  "notes": "0.4.5: 修复备用API下线问题，改进自算估值算法准确性，优化无官方估值时的显示。"
 }

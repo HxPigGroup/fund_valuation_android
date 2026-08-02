@@ -116,39 +116,89 @@ final class FundService {
     private FundRow fetchRow(String code, FundRow officialEstimate) {
         FundRow row = officialEstimate == null ? new FundRow(code) : officialEstimate;
         List<String> warnings = new ArrayList<>();
-        if (!FundFormat.hasValue(row.estimateValue)) {
-            try {
-                fetchOfficialEstimateFallback(row);
-            } catch (IOException | JSONException exception) {
-                // Keep going. A missing官方估值 can still be补成自算值.
-            }
-        }
+        boolean hasOfficialEstimate = FundFormat.hasValue(row.estimateValue);
+
+        // 备用 API 已下线，不再尝试
+        // 始终使用自算估值作为主要方案
+
+        // 获取历史净值（用于昨日净值和自算估值基准）
         NavInfo navInfo = null;
         try {
             navInfo = fetchHistory(row);
         } catch (IOException | JSONException exception) {
             warnings.add("历史净值接口失败");
         }
-        if (!FundFormat.hasValue(row.estimateValue) && navInfo != null) {
-            try {
-                List<HoldingItem> holdings = fetchHoldings(code);
-                Map<String, StockQuote> quotes = fetchStockQuotes(holdings);
-                SelfEstimate selfEstimate = estimateByHoldings(navInfo, holdings, quotes);
-                if (selfEstimate != null) {
-                    row.selfEstimateValue = FundFormat.value4(String.valueOf(selfEstimate.value));
-                    row.selfEstimateGrowth = FundFormat.percentFromNumber(selfEstimate.growth);
+
+        // 如果没有官方估值或官方估值失败，尝试获取基金名称并使用自算估值
+        if (!hasOfficialEstimate) {
+            // 尝试从历史接口获取基金名称
+            if (!FundFormat.hasValue(row.name)) {
+                try {
+                    fetchFundName(row);
+                } catch (IOException | JSONException exception) {
+                    // 名称获取失败，使用代码作为名称
                 }
-            } catch (RuntimeException exception) {
-                warnings.add("自算估值接口失败");
+            }
+
+            // 使用自算估值
+            if (navInfo != null) {
+                try {
+                    List<HoldingItem> holdings = fetchHoldings(code);
+                    Map<String, StockQuote> quotes = fetchStockQuotes(holdings);
+                    SelfEstimate selfEstimate = estimateByHoldings(navInfo, holdings, quotes);
+                    if (selfEstimate != null) {
+                        row.selfEstimateValue = FundFormat.value4(String.valueOf(selfEstimate.value));
+                        row.selfEstimateGrowth = FundFormat.percentFromNumber(selfEstimate.growth);
+                    }
+                } catch (RuntimeException exception) {
+                    warnings.add("自算估值接口失败");
+                }
             }
         }
+
+        // 确保有基金名称
         if (!FundFormat.hasValue(row.name)) {
             row.name = code;
         }
-        if (!warnings.isEmpty()) {
+
+        // 设置提示信息
+        if (!hasOfficialEstimate) {
+            if (warnings.isEmpty()) {
+                row.message = "使用自算估值";
+            } else {
+                row.message = "自算估值：" + joinWarnings(warnings);
+            }
+        } else if (!warnings.isEmpty()) {
             row.message = joinWarnings(warnings);
         }
+
         return row;
+    }
+
+    /**
+     * 尝试从历史净值接口获取基金名称
+     */
+    private void fetchFundName(FundRow row) throws IOException, JSONException {
+        String url = "https://api.fund.eastmoney.com/f10/lsjz?fundCode="
+                + row.code
+                + "&pageIndex=1&pageSize=1";
+        JSONObject root = new JSONObject(get(url, "https://fundf10.eastmoney.com/"));
+        // 名称通常在另一个接口获取，这里尝试从基本信息接口获取
+        String nameUrl = "https://fund.eastmoney.com/pingzhongdata/" + row.code + ".js";
+        try {
+            String text = get(nameUrl, "https://fund.eastmoney.com/");
+            // 解析JS文件中的基金名称
+            int nameIndex = text.indexOf("\"name\"");
+            if (nameIndex >= 0) {
+                int start = text.indexOf('"', nameIndex + 6) + 1;
+                int end = text.indexOf('"', start);
+                if (start > 0 && end > start) {
+                    row.name = text.substring(start, end);
+                }
+            }
+        } catch (IOException e) {
+            // 忽略，保留原名称或代码
+        }
     }
 
     private Map<String, FundRow> fetchOfficialEstimateMap(List<String> codes) {
@@ -301,16 +351,12 @@ final class FundService {
         }
     }
 
+    /**
+     * 备用 API (fundgz.1234567.com.cn) 已下线，不再使用
+     * 保留方法签名以保持兼容性，但始终抛出异常
+     */
     private void fetchOfficialEstimateFallback(FundRow row) throws IOException, JSONException {
-        String url = "https://fundgz.1234567.com.cn/js/" + row.code + ".js?rt=" + System.currentTimeMillis();
-        String text = get(url, "https://fund.eastmoney.com/");
-        JSONObject payload = parseJsonp(text);
-        row.name = FundFormat.orBlank(payload.optString("name", row.name));
-        row.estimateValue = FundFormat.value4(payload.optString("gsz", ""));
-        row.estimateGrowth = FundFormat.percent(payload.optString("gszzl", ""));
-        row.publishedNav = FundFormat.value4(payload.optString("dwjz", ""));
-        row.estimateTime = payload.optString("gztime", "");
-        row.navDate = payload.optString("jzrq", "");
+        throw new IOException("FundGZ fallback API has been discontinued");
     }
 
     private NavInfo fetchHistory(FundRow row) throws IOException, JSONException {
@@ -418,6 +464,12 @@ final class FundService {
         return (latest / start - 1.0) * 100.0;
     }
 
+    /**
+     * 假设的基金股票仓位比例，用于归一化估算
+     * 混合型基金通常股票仓位 60-80%
+     */
+    private static final double ASSUMED_STOCK_RATIO = 0.70;
+
     private SelfEstimate estimateByHoldings(
             NavInfo navInfo,
             List<HoldingItem> holdings,
@@ -463,24 +515,39 @@ final class FundService {
             return null;
         }
 
-        double scale = 1.0;
-        Double fundWindowReturn = historyWindowReturn(navInfo.navHistory, SELF_ESTIMATE_HISTORY_DAYS);
-        if (
-                fundWindowReturn != null
-                        && historicalCount > 0
-                        && Math.abs(historicalWeightedReturn) > 1e-6
-        ) {
-            double rawScale = (fundWindowReturn / 100.0) / historicalWeightedReturn;
-            scale = clamp(rawScale, 0.3, 1.7);
-            double confidence = Math.min(1.0, coveredWeight / 100.0);
-            scale = 1.0 + (scale - 1.0) * confidence;
+        // 计算归一化的等效涨跌
+        // coveredWeight 是百分比形式（如 35.5 表示 35.5%）
+        // 归一化到假设的基金股票仓位比例 (70%)
+        // 例如: coveredWeight=35.5%, 假设股票仓位=70%
+        // 置信度 = 35.5% / 70% = 50.7%
+        // 等效涨跌 = 实际加权涨跌 / 0.507 = 实际加权涨跌 × 1.97
+        double normalizedReturn = currentWeightedReturn;
+        double confidence = Math.min(1.0, coveredWeight / 100.0 / ASSUMED_STOCK_RATIO);
+
+        if (confidence < 1.0) {
+            // 覆盖不足100%时，归一化到假设的股票仓位
+            normalizedReturn = currentWeightedReturn / confidence;
         }
 
+        // 如果有历史校准数据，使用校准比例
+        double scale = 1.0;
+        Double fundWindowReturn = historyWindowReturn(navInfo.navHistory, SELF_ESTIMATE_HISTORY_DAYS);
+        if (fundWindowReturn != null && historicalCount > 0 && Math.abs(historicalWeightedReturn) > 1e-6) {
+            // 历史校准：使用更小的调整范围 (0.8-1.2)
+            double rawScale = (fundWindowReturn / 100.0) / historicalWeightedReturn;
+            scale = clamp(rawScale, 0.8, 1.2);
+            // 置信度由历史数据质量和覆盖权重共同决定
+            confidence = Math.min(1.0, (historicalCount / 10.0) * 0.5 + confidence * 0.5);
+        }
+
+        // 计算最终估算值
         SelfEstimate estimate = new SelfEstimate();
-        estimate.value = navInfo.publishedNav * (1.0 + currentWeightedReturn * scale);
-        estimate.growth = currentWeightedReturn * scale * 100.0;
+        double finalReturn = normalizedReturn * scale;
+        estimate.value = navInfo.publishedNav * (1.0 + finalReturn);
+        estimate.growth = finalReturn * 100.0;
         estimate.coverage = coveredWeight;
         estimate.holdingCount = holdingCount;
+        estimate.confidence = confidence;
         return estimate;
     }
 
@@ -934,6 +1001,7 @@ final class FundService {
         Double growth;
         Double coverage;
         int holdingCount;
+        double confidence = 1.0;  // 估算置信度 0-1
     }
 
     private String joinWarnings(List<String> warnings) {
