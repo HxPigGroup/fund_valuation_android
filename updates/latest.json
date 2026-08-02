@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "0.4.5",
-  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.5.apk",
-  "notes": "0.4.5: 修复备用API下线问题，改进自算估值算法准确性，优化无官方估值时的显示。"
+  "versionCode": 11,
+  "versionName": "0.4.6",
+  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.6.apk",
+  "notes": "0.4.6: 修复自算估值算法错误归一化问题，估算结果更准确。"
 }
