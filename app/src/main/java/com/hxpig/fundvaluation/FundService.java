@@ -517,37 +517,28 @@ final class FundService {
 
         // 计算归一化的等效涨跌
         // coveredWeight 是百分比形式（如 35.5 表示 35.5%）
-        // 归一化到假设的基金股票仓位比例 (70%)
-        // 例如: coveredWeight=35.5%, 假设股票仓位=70%
-        // 置信度 = 35.5% / 70% = 50.7%
-        // 等效涨跌 = 实际加权涨跌 / 0.507 = 实际加权涨跌 × 1.97
-        double normalizedReturn = currentWeightedReturn;
-        double confidence = Math.min(1.0, coveredWeight / 100.0 / ASSUMED_STOCK_RATIO);
+        // 注意：currentWeightedReturn 已经是加权涨跌的小数形式
+        // 例如：持仓涨 2% 权重 4.57%，则贡献 = 0.02 * 0.0457 = 0.000914
+        // 这直接就是基金净值的涨跌，不需要归一化
+        double estimatedReturn = currentWeightedReturn;
 
-        if (confidence < 1.0) {
-            // 覆盖不足100%时，归一化到假设的股票仓位
-            normalizedReturn = currentWeightedReturn / confidence;
-        }
-
-        // 如果有历史校准数据，使用校准比例
+        // 如果有历史校准数据，使用校准比例微调
         double scale = 1.0;
         Double fundWindowReturn = historyWindowReturn(navInfo.navHistory, SELF_ESTIMATE_HISTORY_DAYS);
         if (fundWindowReturn != null && historicalCount > 0 && Math.abs(historicalWeightedReturn) > 1e-6) {
-            // 历史校准：使用更小的调整范围 (0.8-1.2)
+            // 历史校准：使用更小的调整范围 (0.85-1.15)
             double rawScale = (fundWindowReturn / 100.0) / historicalWeightedReturn;
-            scale = clamp(rawScale, 0.8, 1.2);
-            // 置信度由历史数据质量和覆盖权重共同决定
-            confidence = Math.min(1.0, (historicalCount / 10.0) * 0.5 + confidence * 0.5);
+            scale = clamp(rawScale, 0.85, 1.15);
         }
 
         // 计算最终估算值
         SelfEstimate estimate = new SelfEstimate();
-        double finalReturn = normalizedReturn * scale;
+        double finalReturn = estimatedReturn * scale;
         estimate.value = navInfo.publishedNav * (1.0 + finalReturn);
         estimate.growth = finalReturn * 100.0;
         estimate.coverage = coveredWeight;
         estimate.holdingCount = holdingCount;
-        estimate.confidence = confidence;
+        estimate.confidence = Math.min(1.0, coveredWeight / 100.0 / ASSUMED_STOCK_RATIO);
         return estimate;
     }
 
@@ -771,7 +762,17 @@ final class FundService {
             }
 
             StockQuote quote = new StockQuote();
-            quote.pctChange = FundFormat.parseNumber(latestParts[8]);
+            Double rawPctChange = FundFormat.parseNumber(latestParts[8]);
+            // 数据验证：股票涨跌通常在 -20% 到 +20% 之间
+            // 如果值超出范围，可能是数据格式问题（如已是小数形式），进行转换
+            if (rawPctChange != null) {
+                if (Math.abs(rawPctChange) > 20) {
+                    // 如果值太大，可能已经是小数形式（如 0.025 表示 2.5%），需要转换
+                    quote.pctChange = rawPctChange * 100.0;
+                } else {
+                    quote.pctChange = rawPctChange;
+                }
+            }
             if (klines.length() > SELF_ESTIMATE_HISTORY_DAYS) {
                 String startLine = klines.optString(klines.length() - 1 - SELF_ESTIMATE_HISTORY_DAYS, "");
                 String[] startParts = startLine.split(",");
@@ -779,7 +780,13 @@ final class FundService {
                     Double latestClose = FundFormat.parseNumber(latestParts[2]);
                     Double startClose = FundFormat.parseNumber(startParts[2]);
                     if (latestClose != null && startClose != null && startClose != 0.0) {
-                        quote.windowPctChange = (latestClose / startClose - 1.0) * 100.0;
+                        Double rawWindowChange = (latestClose / startClose - 1.0) * 100.0;
+                        // 同样验证历史窗口涨跌幅
+                        if (Math.abs(rawWindowChange) > 50) {
+                            quote.windowPctChange = rawWindowChange / 100.0;
+                        } else {
+                            quote.windowPctChange = rawWindowChange;
+                        }
                     }
                 }
             }
