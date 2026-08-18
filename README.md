@@ -49,7 +49,7 @@ Android 端直接请求公网 HTTPS 接口，不读取网页端缓存：
 - 新浪盘中估值：`https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/FdFundService.getEstimateNetworthPic`
 - 历史净值：`https://api.fund.eastmoney.com/f10/lsjz`
 
-自算估值会结合东方财富持仓页和股票日线接口做历史校准，和网页端保持同一思路；官方估算缺失时会显示在扩展列里。
+自算估值会结合东方财富持仓页和股票日线接口做历史校准，和网页端保持同一思路；东方财富与新浪估算都缺失时会显示在扩展列里。
 
 ## 构建
 

@@ -138,7 +138,7 @@ final class FundService {
             warnings.add("历史净值接口失败");
         }
 
-        // 如果没有官方估值或官方估值失败，尝试获取基金名称并使用自算估值
+        // 两个盘中估值源都缺失时，才运行较慢的持仓自算兜底。
         if (!hasOfficialEstimate) {
             // 尝试从历史接口获取基金名称
             if (!FundFormat.hasValue(row.name)) {
@@ -149,8 +149,7 @@ final class FundService {
                 }
             }
 
-            // 使用自算估值
-            if (navInfo != null) {
+            if (!hasSinaEstimate && navInfo != null) {
                 try {
                     List<HoldingItem> holdings = fetchHoldings(code);
                     Map<String, StockQuote> quotes = fetchStockQuotes(holdings);
