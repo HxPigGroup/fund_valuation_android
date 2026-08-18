@@ -379,7 +379,8 @@ public final class MainActivity extends Activity {
                             showAboutSection("作者与仓库", "作者：Facico\n仓库：https://github.com/HxPigGroup/fund_valuation_android");
                         } else if (which == 1) {
                             showAboutSection("版本更新记录",
-                                    "0.4.7：新增新浪盘中估值，与东方财富估值同时展示。\n\n"
+                                    "0.4.8：同时展示新浪的普通估算与前十大重仓加权估算，并将新浪列移到东方财富前面。\n\n"
+                                            + "0.4.7：新增新浪盘中估值，与东方财富估值同时展示。\n\n"
                                             + "0.4.6：修复自算估值算法的归一化问题。\n\n"
                                             + "0.4.5：停用已下线的逐基金估值接口并改进自算估值。\n\n"
                                             + "0.4.4：同步网页端的自算估值逻辑，使用历史净值和持仓日线校准自算值。\n\n"
@@ -752,10 +753,12 @@ public final class MainActivity extends Activity {
         fixedTable.addView(fixedHeader);
 
         TableRow scrollHeader = new TableRow(this);
-        addHeader(scrollHeader, "东方财富\n涨跌", 104);
-        addHeader(scrollHeader, "东方财富\n估算值", 104);
         addHeader(scrollHeader, "新浪估算\n涨跌", 104);
         addHeader(scrollHeader, "新浪估算值", 104);
+        addHeader(scrollHeader, "新浪重仓\n估算涨跌", 104);
+        addHeader(scrollHeader, "新浪重仓\n估算值", 104);
+        addHeader(scrollHeader, "东方财富\n涨跌", 104);
+        addHeader(scrollHeader, "东方财富\n估算值", 104);
         if (showExtraColumns) {
             addHeader(scrollHeader, "自算估值", 96);
             addHeader(scrollHeader, "自算涨跌", 96);
@@ -788,10 +791,12 @@ public final class MainActivity extends Activity {
 
             TableRow scrollRow = new TableRow(this);
             scrollRow.setOnLongClickListener(fundLongClickListener(row));
-            attachFundLongPress(addEstimateGrowthCell(scrollRow, row), row);
-            attachFundLongPress(addEstimateValueCell(scrollRow, row), row);
             attachFundLongPress(addSinaEstimateGrowthCell(scrollRow, row), row);
             attachFundLongPress(addSinaEstimateValueCell(scrollRow, row), row);
+            attachFundLongPress(addSinaHoldingsEstimateGrowthCell(scrollRow, row), row);
+            attachFundLongPress(addSinaHoldingsEstimateValueCell(scrollRow, row), row);
+            attachFundLongPress(addEstimateGrowthCell(scrollRow, row), row);
+            attachFundLongPress(addEstimateValueCell(scrollRow, row), row);
             if (showExtraColumns) {
                 attachFundLongPress(addCell(scrollRow, row.selfEstimateValue, 96, COLOR_MUTED, Typeface.NORMAL), row);
                 attachFundLongPress(addCell(scrollRow, row.selfEstimateGrowth, 96, toneColor(row.selfEstimateGrowth), Typeface.NORMAL), row);
@@ -884,6 +889,30 @@ public final class MainActivity extends Activity {
         return view;
     }
 
+    private TextView addSinaHoldingsEstimateValueCell(TableRow row, FundRow fundRow) {
+        TextView view = cell(
+                FundFormat.orBlank(fundRow.sinaHoldingsEstimateValue),
+                104,
+                COLOR_INK,
+                Typeface.NORMAL,
+                Gravity.CENTER
+        );
+        row.addView(view);
+        return view;
+    }
+
+    private TextView addSinaHoldingsEstimateGrowthCell(TableRow row, FundRow fundRow) {
+        TextView view = cell(
+                FundFormat.orBlank(fundRow.sinaHoldingsEstimateGrowth),
+                104,
+                toneColor(fundRow.sinaHoldingsEstimateGrowth),
+                Typeface.BOLD,
+                Gravity.CENTER
+        );
+        row.addView(view);
+        return view;
+    }
+
     private void addHeader(TableRow row, String text, int widthDp) {
         row.addView(headerCell(text, widthDp, Gravity.CENTER));
     }
@@ -950,8 +979,9 @@ public final class MainActivity extends Activity {
         box.setPadding(dp(18), dp(8), dp(18), 0);
 
         TextView current = text(
-                "东方财富涨跌：" + FundFormat.orBlank(row.estimateGrowth)
-                        + "    新浪涨跌：" + FundFormat.orBlank(row.sinaEstimateGrowth)
+                "新浪涨跌：" + FundFormat.orBlank(row.sinaEstimateGrowth)
+                        + "    新浪重仓：" + FundFormat.orBlank(row.sinaHoldingsEstimateGrowth)
+                        + "    东方财富：" + FundFormat.orBlank(row.estimateGrowth)
                         + "\n提醒优先使用东方财富，缺失时使用新浪。",
                 14,
                 COLOR_MUTED,
@@ -1172,6 +1202,7 @@ public final class MainActivity extends Activity {
                         render();
                         int eastmoneyCount = 0;
                         int sinaCount = 0;
+                        int sinaHoldingsCount = 0;
                         for (FundRow row : rows) {
                             if (FundFormat.hasValue(row.estimateGrowth)) {
                                 eastmoneyCount++;
@@ -1179,10 +1210,14 @@ public final class MainActivity extends Activity {
                             if (FundFormat.hasValue(row.sinaEstimateGrowth)) {
                                 sinaCount++;
                             }
+                            if (FundFormat.hasValue(row.sinaHoldingsEstimateGrowth)) {
+                                sinaHoldingsCount++;
+                            }
                         }
                         setStatus(
-                                "已刷新 " + rows.size() + " 只基金，东方财富 "
-                                        + eastmoneyCount + " 只，新浪 " + sinaCount + " 只。",
+                                "已刷新 " + rows.size() + " 只基金，新浪 " + sinaCount
+                                        + " 只，新浪重仓 " + sinaHoldingsCount
+                                        + " 只，东方财富 " + eastmoneyCount + " 只。",
                                 false
                         );
                     }

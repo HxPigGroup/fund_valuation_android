@@ -1,6 +1,6 @@
 {
-  "versionCode": 12,
-  "versionName": "0.4.7",
-  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.7.apk",
-  "notes": "0.4.7: 新增新浪盘中估值，与东方财富估值同时展示。"
+  "versionCode": 13,
+  "versionName": "0.4.8",
+  "apkUrl": "https://raw.githubusercontent.com/HxPigGroup/fund_valuation_android/main/updates/fund-valuation-android-0.4.8.apk",
+  "notes": "0.4.8: 同时展示新浪两组估值，并将新浪估值放在东方财富前面。"
 }

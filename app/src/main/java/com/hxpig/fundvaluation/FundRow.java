@@ -10,6 +10,8 @@ final class FundRow {
     String estimateGrowth = FundFormat.BLANK;
     String sinaEstimateValue = FundFormat.BLANK;
     String sinaEstimateGrowth = FundFormat.BLANK;
+    String sinaHoldingsEstimateValue = FundFormat.BLANK;
+    String sinaHoldingsEstimateGrowth = FundFormat.BLANK;
     String publishedNav = FundFormat.BLANK;
     String publishedGrowth = FundFormat.BLANK;
     String fiveDayGrowth = FundFormat.BLANK;
@@ -33,6 +35,8 @@ final class FundRow {
         object.put("estimateGrowth", estimateGrowth);
         object.put("sinaEstimateValue", sinaEstimateValue);
         object.put("sinaEstimateGrowth", sinaEstimateGrowth);
+        object.put("sinaHoldingsEstimateValue", sinaHoldingsEstimateValue);
+        object.put("sinaHoldingsEstimateGrowth", sinaHoldingsEstimateGrowth);
         object.put("publishedNav", publishedNav);
         object.put("publishedGrowth", publishedGrowth);
         object.put("fiveDayGrowth", fiveDayGrowth);
@@ -53,6 +57,8 @@ final class FundRow {
         row.estimateGrowth = object.optString("estimateGrowth", FundFormat.BLANK);
         row.sinaEstimateValue = object.optString("sinaEstimateValue", FundFormat.BLANK);
         row.sinaEstimateGrowth = object.optString("sinaEstimateGrowth", FundFormat.BLANK);
+        row.sinaHoldingsEstimateValue = object.optString("sinaHoldingsEstimateValue", FundFormat.BLANK);
+        row.sinaHoldingsEstimateGrowth = object.optString("sinaHoldingsEstimateGrowth", FundFormat.BLANK);
         row.publishedNav = object.optString("publishedNav", FundFormat.BLANK);
         row.publishedGrowth = object.optString("publishedGrowth", FundFormat.BLANK);
         row.fiveDayGrowth = object.optString("fiveDayGrowth", FundFormat.BLANK);
@@ -67,6 +73,11 @@ final class FundRow {
     }
 
     String preferredEstimateGrowth() {
-        return FundFormat.hasValue(estimateGrowth) ? estimateGrowth : sinaEstimateGrowth;
+        if (FundFormat.hasValue(estimateGrowth)) {
+            return estimateGrowth;
+        }
+        return FundFormat.hasValue(sinaEstimateGrowth)
+                ? sinaEstimateGrowth
+                : sinaHoldingsEstimateGrowth;
     }
 }

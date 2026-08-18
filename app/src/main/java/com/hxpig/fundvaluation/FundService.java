@@ -218,16 +218,25 @@ final class FundService {
             }
             String estimateValue = point.optString("pre_nav", "");
             String estimateGrowth = point.optString("nav_pct", "");
-            if (!FundFormat.hasValue(estimateValue) && !FundFormat.hasValue(estimateGrowth)) {
+            String holdingsEstimateValue = point.optString("pre_nav2", "");
+            String holdingsEstimateGrowth = point.optString("nav2_pct", "");
+            if (!FundFormat.hasValue(estimateValue)
+                    && !FundFormat.hasValue(estimateGrowth)
+                    && !FundFormat.hasValue(holdingsEstimateValue)
+                    && !FundFormat.hasValue(holdingsEstimateGrowth)) {
                 continue;
             }
             row.sinaEstimateValue = FundFormat.value4(estimateValue);
             row.sinaEstimateGrowth = FundFormat.percent(estimateGrowth);
+            row.sinaHoldingsEstimateValue = FundFormat.value4(holdingsEstimateValue);
+            row.sinaHoldingsEstimateGrowth = FundFormat.percent(holdingsEstimateGrowth);
             String date = point.optString("pre_date", "").trim();
             String time = point.optString("min_time", "").trim();
             row.sinaEstimateTime = (date + " " + time).trim();
             return FundFormat.hasValue(row.sinaEstimateValue)
-                    || FundFormat.hasValue(row.sinaEstimateGrowth);
+                    || FundFormat.hasValue(row.sinaEstimateGrowth)
+                    || FundFormat.hasValue(row.sinaHoldingsEstimateValue)
+                    || FundFormat.hasValue(row.sinaHoldingsEstimateGrowth);
         }
         return false;
     }
