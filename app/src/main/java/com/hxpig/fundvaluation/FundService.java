@@ -47,6 +47,8 @@ final class FundService {
     private static final long THIRTY_DAYS_MS = 30L * 24L * 60L * 60L * 1000L;
     private static final String ESTIMATION_LIST_URL =
             "https://api.fund.eastmoney.com/FundGuZhi/GetFundGZList";
+    private static final String SINA_ESTIMATION_URL =
+            "https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/FdFundService.getEstimateNetworthPic";
     private static final String FUND_HOLDINGS_PAGE_URL = "https://fundf10.eastmoney.com/ccmx_%s.html";
     private static final String FUND_HOLDINGS_DATA_URL = "https://fundf10.eastmoney.com/FundArchivesDatas.aspx";
     private static final String STOCK_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get";
@@ -89,8 +91,8 @@ final class FundService {
         Collections.sort(rows, new Comparator<FundRow>() {
             @Override
             public int compare(FundRow left, FundRow right) {
-                Double leftValue = FundFormat.parseNumber(left.estimateGrowth);
-                Double rightValue = FundFormat.parseNumber(right.estimateGrowth);
+                Double leftValue = FundFormat.parseNumber(left.preferredEstimateGrowth());
+                Double rightValue = FundFormat.parseNumber(right.preferredEstimateGrowth());
                 if (leftValue == null && rightValue == null) {
                     return left.code.compareTo(right.code);
                 }
@@ -117,6 +119,13 @@ final class FundService {
         FundRow row = officialEstimate == null ? new FundRow(code) : officialEstimate;
         List<String> warnings = new ArrayList<>();
         boolean hasOfficialEstimate = FundFormat.hasValue(row.estimateValue);
+        boolean hasSinaEstimate = false;
+
+        try {
+            hasSinaEstimate = fetchSinaEstimate(row);
+        } catch (IOException | JSONException exception) {
+            warnings.add("新浪估值接口失败");
+        }
 
         // 备用 API 已下线，不再尝试
         // 始终使用自算估值作为主要方案
@@ -161,18 +170,67 @@ final class FundService {
             row.name = code;
         }
 
+        boolean hasSelfEstimate = FundFormat.hasValue(row.selfEstimateValue);
+
         // 设置提示信息
         if (!hasOfficialEstimate) {
-            if (warnings.isEmpty()) {
+            if (hasSinaEstimate && hasSelfEstimate) {
+                row.message = "东方财富估值缺失，已显示新浪和自算估值";
+            } else if (hasSinaEstimate) {
+                row.message = "东方财富估值缺失，已显示新浪估值";
+            } else if (hasSelfEstimate) {
                 row.message = "使用自算估值";
             } else {
-                row.message = "自算估值：" + joinWarnings(warnings);
+                row.message = "暂无盘中估值";
+            }
+            if (!warnings.isEmpty()) {
+                row.message += "：" + joinWarnings(warnings);
             }
         } else if (!warnings.isEmpty()) {
             row.message = joinWarnings(warnings);
         }
 
         return row;
+    }
+
+    private boolean fetchSinaEstimate(FundRow row) throws IOException, JSONException {
+        String url = SINA_ESTIMATION_URL
+                + "?symbol=" + row.code
+                + "&callback=cb&_=" + System.currentTimeMillis();
+        JSONObject root = parseJsonp(get(
+                url,
+                "https://finance.sina.com.cn/fund/quotes/" + row.code + "/bc.shtml"
+        ));
+        JSONObject result = root.optJSONObject("result");
+        JSONObject status = result == null ? null : result.optJSONObject("status");
+        if (status == null || status.optInt("code", -1) != 0) {
+            return false;
+        }
+        JSONObject data = result.optJSONObject("data");
+        JSONArray points = data == null ? null : data.optJSONArray("networth");
+        if (points == null) {
+            return false;
+        }
+
+        for (int index = points.length() - 1; index >= 0; index--) {
+            JSONObject point = points.optJSONObject(index);
+            if (point == null) {
+                continue;
+            }
+            String estimateValue = point.optString("pre_nav", "");
+            String estimateGrowth = point.optString("nav_pct", "");
+            if (!FundFormat.hasValue(estimateValue) && !FundFormat.hasValue(estimateGrowth)) {
+                continue;
+            }
+            row.sinaEstimateValue = FundFormat.value4(estimateValue);
+            row.sinaEstimateGrowth = FundFormat.percent(estimateGrowth);
+            String date = point.optString("pre_date", "").trim();
+            String time = point.optString("min_time", "").trim();
+            row.sinaEstimateTime = (date + " " + time).trim();
+            return FundFormat.hasValue(row.sinaEstimateValue)
+                    || FundFormat.hasValue(row.sinaEstimateGrowth);
+        }
+        return false;
     }
 
     /**
@@ -934,7 +992,8 @@ final class FundService {
     }
 
     private JSONObject parseJsonp(String text) throws JSONException {
-        int start = text.indexOf('(');
+        int callback = text.indexOf("cb(");
+        int start = callback < 0 ? -1 : callback + 2;
         int end = text.lastIndexOf(')');
         if (start < 0 || end <= start) {
             throw new JSONException("Invalid JSONP payload");

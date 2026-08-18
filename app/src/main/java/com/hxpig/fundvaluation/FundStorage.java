@@ -195,7 +195,7 @@ final class FundStorage {
         String now = FundFormat.nowText();
         for (FundAlert alert : alerts) {
             FundRow row = rows.get(alert.code);
-            Double growth = row == null ? null : FundFormat.parseNumber(row.estimateGrowth);
+            Double growth = row == null ? null : FundFormat.parseNumber(row.preferredEstimateGrowth());
             if (row != null && FundFormat.hasValue(row.name)) {
                 alert.fundName = row.name;
             }

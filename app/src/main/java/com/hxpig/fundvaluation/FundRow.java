@@ -8,6 +8,8 @@ final class FundRow {
     String name = FundFormat.BLANK;
     String estimateValue = FundFormat.BLANK;
     String estimateGrowth = FundFormat.BLANK;
+    String sinaEstimateValue = FundFormat.BLANK;
+    String sinaEstimateGrowth = FundFormat.BLANK;
     String publishedNav = FundFormat.BLANK;
     String publishedGrowth = FundFormat.BLANK;
     String fiveDayGrowth = FundFormat.BLANK;
@@ -15,6 +17,7 @@ final class FundRow {
     String selfEstimateValue = FundFormat.BLANK;
     String selfEstimateGrowth = FundFormat.BLANK;
     String estimateTime = "";
+    String sinaEstimateTime = "";
     String navDate = "";
     String message = "";
 
@@ -28,6 +31,8 @@ final class FundRow {
         object.put("name", name);
         object.put("estimateValue", estimateValue);
         object.put("estimateGrowth", estimateGrowth);
+        object.put("sinaEstimateValue", sinaEstimateValue);
+        object.put("sinaEstimateGrowth", sinaEstimateGrowth);
         object.put("publishedNav", publishedNav);
         object.put("publishedGrowth", publishedGrowth);
         object.put("fiveDayGrowth", fiveDayGrowth);
@@ -35,6 +40,7 @@ final class FundRow {
         object.put("selfEstimateValue", selfEstimateValue);
         object.put("selfEstimateGrowth", selfEstimateGrowth);
         object.put("estimateTime", estimateTime);
+        object.put("sinaEstimateTime", sinaEstimateTime);
         object.put("navDate", navDate);
         object.put("message", message);
         return object;
@@ -45,6 +51,8 @@ final class FundRow {
         row.name = object.optString("name", FundFormat.BLANK);
         row.estimateValue = object.optString("estimateValue", FundFormat.BLANK);
         row.estimateGrowth = object.optString("estimateGrowth", FundFormat.BLANK);
+        row.sinaEstimateValue = object.optString("sinaEstimateValue", FundFormat.BLANK);
+        row.sinaEstimateGrowth = object.optString("sinaEstimateGrowth", FundFormat.BLANK);
         row.publishedNav = object.optString("publishedNav", FundFormat.BLANK);
         row.publishedGrowth = object.optString("publishedGrowth", FundFormat.BLANK);
         row.fiveDayGrowth = object.optString("fiveDayGrowth", FundFormat.BLANK);
@@ -52,8 +60,13 @@ final class FundRow {
         row.selfEstimateValue = object.optString("selfEstimateValue", FundFormat.BLANK);
         row.selfEstimateGrowth = object.optString("selfEstimateGrowth", FundFormat.BLANK);
         row.estimateTime = object.optString("estimateTime", "");
+        row.sinaEstimateTime = object.optString("sinaEstimateTime", "");
         row.navDate = object.optString("navDate", "");
         row.message = object.optString("message", "");
         return row;
+    }
+
+    String preferredEstimateGrowth() {
+        return FundFormat.hasValue(estimateGrowth) ? estimateGrowth : sinaEstimateGrowth;
     }
 }
